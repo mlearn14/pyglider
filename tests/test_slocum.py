@@ -10,19 +10,19 @@ import pyglider.ncprocess as ncprocess
 import pyglider.slocum as slocum
 
 library_dir = Path(__file__).parent.parent.absolute()
-example_dir = library_dir / 'tests/example-data/'
+example_dir = library_dir / "tests/example-data/"
 
 # Create an L0 timeseries from slocum data and test that the resulting netcdf is
 # identical to the test data
-cacdir = example_dir / 'example-slocum/cac/'
-sensorlist = str(example_dir / 'example-slocum/dfo-rosie713_sensors.txt')
-binarydir = str(example_dir / 'example-slocum/realtime_raw/') + '/'
-rawdir_slocum = str(example_dir / 'example-slocum/realtime_rawnc/') + '/'
-deploymentyaml_slocum = str(example_dir / 'example-slocum/deploymentRealtime.yml')
-tsdir = str(example_dir / 'example-slocum/L0-timeseries/') + '/'
-scisuffix = 'tbd'
-glidersuffix = 'sbd'
-profiledir = str(example_dir / 'example-slocum/L0-profiles/')
+cacdir = example_dir / "example-slocum/cac/"
+sensorlist = str(example_dir / "example-slocum/dfo-rosie713_sensors.txt")
+binarydir = str(example_dir / "example-slocum/realtime_raw/") + "/"
+rawdir_slocum = str(example_dir / "example-slocum/realtime_rawnc/") + "/"
+deploymentyaml_slocum = str(example_dir / "example-slocum/deploymentRealtime.yml")
+tsdir = str(example_dir / "example-slocum/L0-timeseries/") + "/"
+scisuffix = "tbd"
+glidersuffix = "sbd"
+profiledir = str(example_dir / "example-slocum/L0-profiles/")
 do_direct = True
 
 # This needs to get run every time the tests are run, so do at top level:
@@ -33,7 +33,7 @@ outname_slocum = slocum.binary_to_timeseries(
     cacdir,
     tsdir,
     deploymentyaml_slocum,
-    search='*.[s|t]bd',
+    search="*.[s|t]bd",
     profile_filt_time=20,
     profile_min_time=20,
 )
@@ -45,7 +45,7 @@ ncprocess.extract_timeseries_profiles(
 output_slocum = xr.open_dataset(outname_slocum)
 # Open test data file
 test_data_slocum = xr.open_dataset(
-    library_dir / 'tests/expected/example-slocum/L0-timeseries/dfo-rosie713-20190615.nc'
+    library_dir / "tests/expected/example-slocum/L0-timeseries/dfo-rosie713-20190615.nc"
 )
 variables_slocum = list(output_slocum.variables)
 
@@ -57,29 +57,29 @@ def test_variables_slocum():
     assert variables_slocum == test_variables
 
 
-@pytest.mark.parametrize('var', variables_slocum)
+@pytest.mark.parametrize("var", variables_slocum)
 def test_example_slocum(var):
     # Test that variables and coordinates match
     assert output_slocum[var].attrs == test_data_slocum[var].attrs
-    if var not in ['time']:
+    if var not in ["time"]:
         np.testing.assert_allclose(
             output_slocum[var].values, test_data_slocum[var].values, rtol=1e-6
         )
     else:
-        dt0 = output_slocum[var].values - np.datetime64('2000-01-01')
-        dt1 = test_data_slocum[var].values - np.datetime64('2000-01-01')
+        dt0 = output_slocum[var].values - np.datetime64("2000-01-01")
+        dt1 = test_data_slocum[var].values - np.datetime64("2000-01-01")
         assert np.allclose(
-            np.array(dt0, dtype='float64'), np.array(dt1, dtype='float64')
+            np.array(dt0, dtype="float64"), np.array(dt1, dtype="float64")
         )
 
 
 def test_example_slocum_metadata():
     # Test that attributes match. Have to remove creation and issue
     # dates first
-    output_slocum.attrs.pop('date_created')
-    output_slocum.attrs.pop('date_issued')
-    test_data_slocum.attrs.pop('date_created')
-    test_data_slocum.attrs.pop('date_issued')
+    output_slocum.attrs.pop("date_created")
+    output_slocum.attrs.pop("date_issued")
+    test_data_slocum.attrs.pop("date_created")
+    test_data_slocum.attrs.pop("date_issued")
     assert output_slocum.attrs == test_data_slocum.attrs
 
 
@@ -91,12 +91,12 @@ def test_profiles_compliant():
     check_suite = CheckSuite()
     check_suite.load_all_available_checkers()
     # Run cf and adcc checks
-    path = profiledir + '/dfo-rosie713-20190620T1313.nc'
-    checker_names = ['gliderdac', 'cf:1.8']
+    path = profiledir + "/dfo-rosie713-20190620T1313.nc"
+    checker_names = ["gliderdac", "cf:1.8"]
     verbose = 0
-    criteria = 'normal'
-    output_filename = example_dir / 'report.json'
-    output_format = 'json'
+    criteria = "normal"
+    output_filename = example_dir / "report.json"
+    output_format = "json"
     """
     Inputs to ComplianceChecker.run_checker
 
@@ -118,16 +118,16 @@ def test_profiles_compliant():
         output_format=output_format,
     )
     # Open the JSON output and get the compliance scores
-    with open(output_filename, 'r') as fp:
+    with open(output_filename, "r") as fp:
         cc_data = json.load(fp)
-        test = cc_data['gliderdac']
-        assert test['high_count'] == 0
-        assert test['medium_count'] == 0
-        assert test['low_count'] == 0
-        test = cc_data['cf:1.8']
-        assert test['high_count'] == 0
-        assert test['medium_count'] == 0
-        assert test['low_count'] == 0
+        test = cc_data["gliderdac"]
+        assert test["high_count"] == 0
+        assert test["medium_count"] == 0
+        assert test["low_count"] == 0
+        test = cc_data["cf:1.8"]
+        assert test["high_count"] == 0
+        assert test["medium_count"] == 0
+        assert test["low_count"] == 0
 
 
 def test_timeseries_compliant():
@@ -135,12 +135,12 @@ def test_timeseries_compliant():
     check_suite = CheckSuite()
     check_suite.load_all_available_checkers()
     # Run cf and adcc checks
-    path = tsdir + '/dfo-rosie713-20190615.nc'
-    checker_names = ['cf:1.8']
+    path = tsdir + "/dfo-rosie713-20190615.nc"
+    checker_names = ["cf:1.8"]
     verbose = 0
-    criteria = 'normal'
-    output_filename = example_dir / 'report.json'
-    output_format = 'json'
+    criteria = "normal"
+    output_filename = example_dir / "report.json"
+    output_format = "json"
     """
     Inputs to ComplianceChecker.run_checker
 
@@ -162,10 +162,10 @@ def test_timeseries_compliant():
         output_format=output_format,
     )
     # Open the JSON output and get the compliance scores
-    with open(output_filename, 'r') as fp:
+    with open(output_filename, "r") as fp:
         cc_data = json.load(fp)
-        test = cc_data['cf:1.8']
-        assert test['high_count'] == 0
+        test = cc_data["cf:1.8"]
+        assert test["high_count"] == 0
         # somehow the checker is confused by our trajectory variables.
-        assert test['medium_count'] == 1
-        assert test['low_count'] == 0
+        assert test["medium_count"] == 1
+        assert test["low_count"] == 0

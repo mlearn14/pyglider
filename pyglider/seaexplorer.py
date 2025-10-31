@@ -19,15 +19,15 @@ _log = logging.getLogger(__name__)
 
 def _outputname(f, outdir):
     fnout = os.path.basename(f)
-    fns = fnout.split('.')
+    fns = fnout.split(".")
     fns = fns[:5]
-    fns[4] = '%04d' % int(fns[4])
-    fns[1] = '%04d' % int(fns[1])
-    fnout = ''
+    fns[4] = "%04d" % int(fns[4])
+    fns[1] = "%04d" % int(fns[1])
+    fnout = ""
     for ff in fns:
-        fnout += ff.lower() + '.'
+        fnout += ff.lower() + "."
     filenum = int(fns[4])
-    return outdir + fnout + 'parquet', filenum
+    return outdir + fnout + "parquet", filenum
 
 
 def _needsupdating(ftype, fin, fout):
@@ -37,7 +37,7 @@ def _needsupdating(ftype, fin, fout):
 
 
 def _sort(ds):
-    return ds.sortby('time')
+    return ds.sortby("time")
 
 
 def raw_to_rawnc(
@@ -107,24 +107,24 @@ def raw_to_rawnc(
     except FileExistsError:
         pass
 
-    for ftype in ['gli', 'pld1']:
+    for ftype in ["gli", "pld1"]:
         goodfiles = []
         badfiles = []
-        for rawsub in ['raw', 'sub']:
-            _log.info(f'Reading in raw files matching *{ftype}.{rawsub}*')
-            d = indir + f'*.{ftype}.{rawsub}.*'
+        for rawsub in ["raw", "sub"]:
+            _log.info(f"Reading in raw files matching *{ftype}.{rawsub}*")
+            d = indir + f"*.{ftype}.{rawsub}.*"
 
             files = glob.glob(d)
-            _log.info(f'Nfiles found: {len(files)}')
+            _log.info(f"Nfiles found: {len(files)}")
 
             fnum = np.zeros(len(files))
             # these files don't sort properly, but we can sort them here.
             for n, f in enumerate(files):
-                p = os.path.basename(f).split('.')
+                p = os.path.basename(f).split(".")
                 fnum[n] = p[4]
             inds = np.argsort(fnum)
             files = [files[ind] for ind in inds]
-            _log.info(f'found {files}')
+            _log.info(f"found {files}")
 
             if len(files) == 0:
                 # If no files of this type found, try the next type
@@ -133,89 +133,93 @@ def raw_to_rawnc(
             for ind, f in enumerate(files):
                 # output name:
                 fnout, filenum = _outputname(f, outdir)
-                _log.info(f'{f} to {fnout}')
+                _log.info(f"{f} to {fnout}")
                 if not incremental or _needsupdating(ftype, f, fnout):
-                    _log.info(f'Doing: {f} to {fnout}')
+                    _log.info(f"Doing: {f} to {fnout}")
                     # Try to read the file with polars. If the file is corrupted (rare), file read will fail and file
                     # is appended to badfiles
                     try:
-                        out = pl.read_csv(f, separator=';')
+                        out = pl.read_csv(f, separator=";")
                     except Exception as e:
-                        _log.warning(f'Exception reading {f}: {e}')
-                        _log.warning(f'Could not read {f}')
+                        _log.warning(f"Exception reading {f}: {e}")
+                        _log.warning(f"Could not read {f}")
                         badfiles.append(f)
                         continue
                     # Parse the datetime from nav files (called Timestamp) and pld1 files (called PLD_REALTIMECLOCK)
-                    if 'Timestamp' in out.columns:
+                    if "Timestamp" in out.columns:
                         out = out.with_columns(
-                            pl.col('Timestamp').str.strptime(
-                                pl.Datetime, format='%d/%m/%Y %H:%M:%S'
+                            pl.col("Timestamp").str.strptime(
+                                pl.Datetime, format="%d/%m/%Y %H:%M:%S"
                             )
                         )
-                        out = out.rename({'Timestamp': 'time'})
+                        out = out.rename({"Timestamp": "time"})
                     else:
                         out = out.with_columns(
-                            pl.col('PLD_REALTIMECLOCK').str.strptime(
-                                pl.Datetime, format='%d/%m/%Y %H:%M:%S.%3f'
+                            pl.col("PLD_REALTIMECLOCK").str.strptime(
+                                pl.Datetime, format="%d/%m/%Y %H:%M:%S.%3f"
                             )
                         )
-                        out = out.rename({'PLD_REALTIMECLOCK': 'time'})
+                        out = out.rename({"PLD_REALTIMECLOCK": "time"})
                     # strip leading and trailing spaces
                     out = out.with_columns(pl.col(pl.String).str.strip_chars())
                     # replace empty values with None
-                    out = out.with_columns(pl.when(pl.col(pl.String).str.len_chars() == 0)
-                                           .then(None)
-                                           .otherwise(pl.col(pl.String))
-                                           .name.keep())
+                    out = out.with_columns(
+                        pl.when(pl.col(pl.String).str.len_chars() == 0)
+                        .then(None)
+                        .otherwise(pl.col(pl.String))
+                        .name.keep()
+                    )
                     for col_name in out.columns:
-                        if 'time' not in col_name.lower():
+                        if "time" not in col_name.lower():
                             out = out.with_columns(pl.col(col_name).cast(pl.Float64))
                     # remove leading and trailing spaces from column names
                     out = out.rename(str.strip)
                     # If AD2CP data present, convert timestamps to datetime
-                    if 'AD2CP_TIME' in out.columns:
+                    if "AD2CP_TIME" in out.columns:
                         # Set datestamps with date 00000 to None
                         out = out.with_columns(
-                            pl.col('AD2CP_TIME').str.strptime(
-                                pl.Datetime, format='%m%d%y %H:%M:%S', strict=False
+                            pl.col("AD2CP_TIME").str.strptime(
+                                pl.Datetime, format="%m%d%y %H:%M:%S", strict=False
                             )
                         )
 
                     # subsetting for heavily oversampled raw data:
-                    if rawsub == 'raw' and dropna_subset is not None:
+                    if rawsub == "raw" and dropna_subset is not None:
                         # This check is the polars equivalent of pandas dropna. See docstring note on dropna
                         dropna_thresh = 1  # Drop rows with more than 1 null
-                        null_exprs = [pl.col(c).is_null().cast(pl.Int64) for c in df.columns]
+                        null_exprs = [
+                            pl.col(c).is_null().cast(pl.Int64) for c in df.columns
+                        ]
 
-                        df = df.with_columns(
-                            pl.sum(null_exprs).alias("nulls")
-                        ).filter(
-                            pl.col("nulls") <= dropna_thresh
-                        ).drop("nulls")
-                    if ftype == 'gli':
+                        df = (
+                            df.with_columns(pl.sum(null_exprs).alias("nulls"))
+                            .filter(pl.col("nulls") <= dropna_thresh)
+                            .drop("nulls")
+                        )
+                    if ftype == "gli":
                         out = out.with_columns(
-                            [(pl.col('NavState') * 0 + int(filenum)).alias('fnum')]
+                            [(pl.col("NavState") * 0 + int(filenum)).alias("fnum")]
                         )
                         out.write_parquet(fnout)
                         goodfiles.append(f)
                     else:
-                        if out.select('time').shape[0] > min_samples_in_file:
+                        if out.select("time").shape[0] > min_samples_in_file:
                             out.write_parquet(fnout)
                             goodfiles.append(f)
                         else:
                             _log.warning(
-                                'Number of sensor data points'
-                                'too small. Skipping parquet write'
+                                "Number of sensor data points"
+                                "too small. Skipping parquet write"
                             )
                             badfiles.append(f)
     if len(badfiles) > 0:
-        _log.warning('Some files could not be parsed:')
+        _log.warning("Some files could not be parsed:")
         for fn in badfiles:
-            _log.warning('%s', fn)
+            _log.warning("%s", fn)
     if not goodfiles:
-        _log.warning(f'No valid unprocessed seaexplorer files found in' f'{indir}')
+        _log.warning(f"No valid unprocessed seaexplorer files found in" f"{indir}")
         return False
-    _log.info('All raw files converted to parquet')
+    _log.info("All raw files converted to parquet")
     return True
 
 
@@ -234,16 +238,16 @@ def drop_pre_1971_samples(df):
     """
     dt_1971 = datetime.datetime(1971, 1, 1)
     # If all dates before or after 1971-01-01, return the dataset
-    pre_1971 = df.filter(pl.col('time') < dt_1971)
+    pre_1971 = df.filter(pl.col("time") < dt_1971)
     if len(pre_1971) == len(df):
         return pre_1971
-    post_1971 = df.filter(pl.col('time') > dt_1971)
+    post_1971 = df.filter(pl.col("time") > dt_1971)
     if len(post_1971) == len(df):
         return post_1971
-    return df.filter(pl.col('time') > dt_1971)
+    return df.filter(pl.col("time") > dt_1971)
 
 
-def merge_parquet(indir, outdir, deploymentyaml, incremental=False, kind='raw'):
+def merge_parquet(indir, outdir, deploymentyaml, incremental=False, kind="raw"):
     """
     Merge all the raw netcdf files in indir.  These are meant to be
     the raw flight and science files from the slocum.
@@ -270,32 +274,32 @@ def merge_parquet(indir, outdir, deploymentyaml, incremental=False, kind='raw'):
 
     deployment = utils._get_deployment(deploymentyaml)
 
-    metadata = deployment['metadata']
-    id = metadata['glider_name']
-    outgli = outdir + '/' + id + '-rawgli.parquet'
-    outpld = outdir + '/' + id + '-' + kind + 'pld.parquet'
+    metadata = deployment["metadata"]
+    id = metadata["glider_name"]
+    outgli = outdir + "/" + id + "-rawgli.parquet"
+    outpld = outdir + "/" + id + "-" + kind + "pld.parquet"
 
-    _log.info('Opening *.gli.sub.*.parquet multi-file dataset from %s', indir)
-    files = sorted(glob.glob(indir + '/*.gli.sub.*.parquet'))
+    _log.info("Opening *.gli.sub.*.parquet multi-file dataset from %s", indir)
+    files = sorted(glob.glob(indir + "/*.gli.sub.*.parquet"))
     if not files:
-        _log.warning(f'No *gli*.parquet files found in {indir}')
+        _log.warning(f"No *gli*.parquet files found in {indir}")
         return False
-    gli = pl.read_parquet(indir + '/*.gli.sub.*.parquet')
+    gli = pl.read_parquet(indir + "/*.gli.sub.*.parquet")
     gli = drop_pre_1971_samples(gli)
     gli.write_parquet(outgli)
-    _log.info(f'Done writing {outgli}')
+    _log.info(f"Done writing {outgli}")
 
-    _log.info('Opening *.pld.sub.*.parquet multi-file dataset')
-    files = sorted(glob.glob(indir + '/*.pld1.' + kind + '.*.parquet'))
+    _log.info("Opening *.pld.sub.*.parquet multi-file dataset")
+    files = sorted(glob.glob(indir + "/*.pld1." + kind + ".*.parquet"))
     if not files:
-        _log.warning(f'No *{kind}*.parquet files found in {indir}')
+        _log.warning(f"No *{kind}*.parquet files found in {indir}")
         return False
-    pld = pl.read_parquet(indir + '/*.pld1.' + kind + '.*.parquet')
+    pld = pl.read_parquet(indir + "/*.pld1." + kind + ".*.parquet")
     pld = drop_pre_1971_samples(pld)
     pld.write_parquet(outpld)
 
-    _log.info(f'Done writing {outpld}')
-    _log.info('Done merge_rawnc')
+    _log.info(f"Done writing {outpld}")
+    _log.info("Done merge_rawnc")
     return True
 
 
@@ -303,12 +307,12 @@ def _interp_gli_to_pld(gli, ds, val, indctd):
     gli_ind = ~np.isnan(val)
     # switch for if we are comparing two polars dataframes or a polars dataframe and a xarray dataset
     if type(ds) is pl.DataFrame:
-        valout = np.interp(ds['time'], gli.filter(gli_ind)['time'], val[gli_ind])
+        valout = np.interp(ds["time"], gli.filter(gli_ind)["time"], val[gli_ind])
     else:
         valout = np.interp(
-            ds['time'].astype(int),
+            ds["time"].astype(int),
             np.array(
-                gli.filter(gli_ind)['time'].to_numpy().astype('datetime64[ns]')
+                gli.filter(gli_ind)["time"].to_numpy().astype("datetime64[ns]")
             ).astype(int),
             val[gli_ind],
         )
@@ -318,7 +322,7 @@ def _interp_gli_to_pld(gli, ds, val, indctd):
 def _interp_pld_to_pld(pld, ds, val, indctd):
     pld_ind = np.where(~np.isnan(val))[0]
     if len(pld_ind) != len(indctd):
-        val = np.interp(ds['time'], pld['time'][pld_ind], val[pld_ind])
+        val = np.interp(ds["time"], pld["time"][pld_ind], val[pld_ind])
     else:
         val = val[indctd]
     return val
@@ -342,12 +346,12 @@ def raw_to_timeseries(
     indir,
     outdir,
     deploymentyaml,
-    kind='raw',
+    kind="raw",
     profile_filt_time=100,
     profile_min_time=300,
     maxgap=10,
     interpolate=False,
-    fnamesuffix='',
+    fnamesuffix="",
 ):
     """
     A little different than above, for the 4-file version of the data set.
@@ -355,98 +359,98 @@ def raw_to_timeseries(
 
     deployment = utils._get_deployment(deploymentyaml)
 
-    metadata = deployment['metadata']
-    ncvar = deployment['netcdf_variables']
-    device_data = deployment['glider_devices']
-    id = metadata['glider_name']
-    _log.info(f'Opening combined nav file {indir}/{id}-rawgli.nc')
-    gli = pl.read_parquet(f'{indir}/{id}-rawgli.parquet')
-    _log.info(f'Opening combined payload file {indir}/{id}-{kind}pld.parquet')
-    sensor = pl.read_parquet(f'{indir}/{id}-{kind}pld.parquet')
+    metadata = deployment["metadata"]
+    ncvar = deployment["netcdf_variables"]
+    device_data = deployment["glider_devices"]
+    id = metadata["glider_name"]
+    _log.info(f"Opening combined nav file {indir}/{id}-rawgli.nc")
+    gli = pl.read_parquet(f"{indir}/{id}-rawgli.parquet")
+    _log.info(f"Opening combined payload file {indir}/{id}-{kind}pld.parquet")
+    sensor = pl.read_parquet(f"{indir}/{id}-{kind}pld.parquet")
     sensor = _remove_fill_values(sensor)
 
     # build a new data set based on info in `deploymentyaml.`
     # We will use ctd as the interpolant
     ds = xr.Dataset()
     attr = {}
-    name = 'time'
+    name = "time"
     for atts in ncvar[name].keys():
-        if atts != 'coordinates':
+        if atts != "coordinates":
             attr[atts] = ncvar[name][atts]
 
     # If present, use the timebase specified in ncvar: timebase in the
     # deployment yaml.
-    if 'timebase' not in ncvar:
+    if "timebase" not in ncvar:
         raise ValueError(
-            'Must specify timebase:source in netcdf_variables section of deployment yaml'
+            "Must specify timebase:source in netcdf_variables section of deployment yaml"
         )
-    if ncvar['timebase']['source'] not in sensor.columns:
+    if ncvar["timebase"]["source"] not in sensor.columns:
         raise ValueError(
             f"timebase source: {ncvar['timebase']['source']} not found in pld1 columns"
         )
-    vals = sensor.select([ncvar['timebase']['source']]).to_numpy()[:, 0]
+    vals = sensor.select([ncvar["timebase"]["source"]]).to_numpy()[:, 0]
     indctd = np.where(~np.isnan(vals))[0]
-    ds['time'] = (
-        ('time'),
-        sensor.select('time').to_numpy()[indctd, 0].astype('datetime64[ns]'),
+    ds["time"] = (
+        ("time"),
+        sensor.select("time").to_numpy()[indctd, 0].astype("datetime64[ns]"),
         attr,
     )
     thenames = list(ncvar.keys())
     # Check yaml to see if interpolate has been set to True
-    if 'interpolate' in thenames:
-        if ncvar['interpolate']:
+    if "interpolate" in thenames:
+        if ncvar["interpolate"]:
             interpolate = True
-    for i in ['time', 'timebase', 'keep_variables', 'interpolate']:
+    for i in ["time", "timebase", "keep_variables", "interpolate"]:
         if i in thenames:
             thenames.remove(i)
     for name in thenames:
-        _log.info('interpolating ' + name)
-        if 'method' not in ncvar[name].keys():
+        _log.info("interpolating " + name)
+        if "method" not in ncvar[name].keys():
             # variables that are in the data set or can be interpolated from it
-            if 'conversion' in ncvar[name].keys():
-                convert = getattr(utils, ncvar[name]['conversion'])
+            if "conversion" in ncvar[name].keys():
+                convert = getattr(utils, ncvar[name]["conversion"])
             else:
                 convert = utils._passthrough
-            sensorname = ncvar[name]['source']
+            sensorname = ncvar[name]["source"]
             if sensorname in list(sensor.columns):
-                _log.debug('sensorname %s', sensorname)
+                _log.debug("sensorname %s", sensorname)
                 val = convert(sensor.select(sensorname).to_numpy()[:, 0])
-                if 'coarsen' in ncvar[name]:
+                if "coarsen" in ncvar[name]:
                     # coarsen oxygen data as originally perscribed
-                    coarsen_time = ncvar[name]['coarsen']
+                    coarsen_time = ncvar[name]["coarsen"]
                     # create a boolean mask of coarsened timesteps. Use this mask to create an array of samples to keep
                     coarse_ints = np.arange(
                         0, len(sensor) / coarsen_time, 1 / coarsen_time
                     ).astype(int)
                     sensor_sub = sensor.with_columns(
-                        pl.lit(coarse_ints).alias('coarse_ints')
+                        pl.lit(coarse_ints).alias("coarse_ints")
                     )
                     # Subsample the variable data keeping only the samples from the coarsened timeseries
                     sensor_sub_grouped = (
-                        sensor_sub.with_columns(pl.col('time').to_physical())
-                        .group_by(pl.col('coarse_ints'), maintain_order=True)
+                        sensor_sub.with_columns(pl.col("time").to_physical())
+                        .group_by(pl.col("coarse_ints"), maintain_order=True)
                         .mean()
-                        .with_columns(pl.col('time').cast(pl.Datetime('ms')))[:-1, :]
+                        .with_columns(pl.col("time").cast(pl.Datetime("ms")))[:-1, :]
                     )
                     val2 = sensor_sub_grouped.select(sensorname).to_numpy()[:, 0]
                     val = _interp_gli_to_pld(sensor_sub_grouped, sensor, val2, indctd)
                 if interpolate and not np.isnan(val).all():
-                    time_original = sensor.select('time').to_numpy()[:, 0]
+                    time_original = sensor.select("time").to_numpy()[:, 0]
                     time_var = time_original[np.where(~np.isnan(val))[0]]
                     var_non_nan = val[np.where(~np.isnan(val))[0]]
-                    time_timebase = sensor.select('time').to_numpy()[indctd, 0]
-                    if val.dtype == '<M8[us]':
+                    time_timebase = sensor.select("time").to_numpy()[indctd, 0]
+                    if val.dtype == "<M8[us]":
                         # for datetime, must convert to numerical, interpolate, then convert back
                         us_since_1970 = (
-                            var_non_nan - np.datetime64('1970-01-01')
+                            var_non_nan - np.datetime64("1970-01-01")
                         ).astype(int)
                         val_int = np.interp(
                             time_timebase.astype(float),
                             time_var.astype(float),
                             us_since_1970,
                         )
-                        val_us = val_int.astype('timedelta64[us]')
-                        val = np.datetime64('1970-01-01') + val_us
+                        val_us = val_int.astype("timedelta64[us]")
+                        val = np.datetime64("1970-01-01") + val_us
                     else:
                         val = np.interp(
                             time_timebase.astype(float),
@@ -466,7 +470,7 @@ def raw_to_timeseries(
                 else:
                     val = val[indctd]
 
-                ncvar['method'] = 'linear fill'
+                ncvar["method"] = "linear fill"
             else:
                 val = gli.select(sensorname).to_numpy()[:, 0]
                 val = convert(val)
@@ -475,28 +479,28 @@ def raw_to_timeseries(
                 val = _interp_gli_to_pld(gli, ds, val, indctd)
 
             # make the attributes:
-            ncvar[name].pop('coordinates', None)
+            ncvar[name].pop("coordinates", None)
             attrs = ncvar[name]
             attrs = utils.fill_required_attrs(attrs)
-            ds[name] = (('time'), val, attrs)
+            ds[name] = (("time"), val, attrs)
 
     # fix lon and lat to be linearly interpolated between fixes
     good = (
         np.where(np.abs(np.diff(ds.longitude)) + np.abs(np.diff(ds.latitude)) > 0)[0]
         + 1
     )
-    ds['longitude'].values = np.interp(ds.time, ds.time[good], ds.longitude[good])
-    ds['latitude'].values = np.interp(ds.time, ds.time[good], ds.latitude[good])
+    ds["longitude"].values = np.interp(ds.time, ds.time[good], ds.longitude[good])
+    ds["latitude"].values = np.interp(ds.time, ds.time[good], ds.latitude[good])
 
     # keep only timestamps with data from one of a set of variables
-    if 'keep_variables' in ncvar:
+    if "keep_variables" in ncvar:
         keeps = np.empty(len(ds.longitude))
         keeps[:] = np.nan
-        keeper_vars = ncvar['keep_variables']
+        keeper_vars = ncvar["keep_variables"]
         for keep_var in keeper_vars:
             keeps[~np.isnan(ds[keep_var].values)] = 1
         ds = ds.where(~np.isnan(keeps))
-        ds = ds.dropna(dim='time', how='all')
+        ds = ds.dropna(dim="time", how="all")
 
     # some derived variables:
     ds = utils.get_glider_depth(ds)
@@ -511,10 +515,10 @@ def raw_to_timeseries(
     ds = ds.sortby(ds.time)
     # Drop duplicate timestamps and check how many are removed this way
     len_before_drop = len(ds.time)
-    if hasattr(ds, 'drop_duplicates'):
-        ds = ds.drop_duplicates(dim='time')
+    if hasattr(ds, "drop_duplicates"):
+        ds = ds.drop_duplicates(dim="time")
     else:
-        time_diffs = (ds.time.astype(int).diff(dim='time') > 1e-6).values
+        time_diffs = (ds.time.astype(int).diff(dim="time") > 1e-6).values
         time_diffs_list = list(time_diffs)
         time_diffs_list.append(True)
         good = np.array(time_diffs_list)
@@ -522,55 +526,55 @@ def raw_to_timeseries(
     len_after_drop = len(ds.time)
     proportion_kept = len_after_drop / len_before_drop
     loss_str = (
-        f'{100 * (1 - proportion_kept)} % samples removed by timestamp deduplication.'
+        f"{100 * (1 - proportion_kept)} % samples removed by timestamp deduplication."
     )
     if proportion_kept < 0.5:
-        raise ValueError(f'{loss_str} Check input data for duplicate timestamps')
+        raise ValueError(f"{loss_str} Check input data for duplicate timestamps")
     elif proportion_kept < 0.999:
         _log.warning(loss_str)
     else:
         _log.info(loss_str)
 
     # Correct oxygen if present:
-    if 'oxygen_concentration' in ncvar.keys():
-        if 'correct_oxygen' in ncvar['oxygen_concentration'].keys():
+    if "oxygen_concentration" in ncvar.keys():
+        if "correct_oxygen" in ncvar["oxygen_concentration"].keys():
             ds = utils.oxygen_concentration_correction(ds, ncvar)
         else:
             _log.warning(
-                'correct_oxygen not found in oxygen yaml. No' 'correction applied'
+                "correct_oxygen not found in oxygen yaml. No" "correction applied"
             )
     ds = ds.assign_coords(longitude=ds.longitude)
     ds = ds.assign_coords(latitude=ds.latitude)
     ds = ds.assign_coords(depth=ds.depth)
     # ds = ds._get_distance_over_ground(ds)
 
-    ds = utils.fill_metadata(ds, deployment['metadata'], device_data)
+    ds = utils.fill_metadata(ds, deployment["metadata"], device_data)
 
-    start = ds['time'].values[0]
-    end = ds['time'].values[-1]
+    start = ds["time"].values[0]
+    end = ds["time"].values[-1]
 
-    ds.attrs['deployment_start'] = str(start)
-    ds.attrs['deployment_end'] = str(end)
+    ds.attrs["deployment_start"] = str(start)
+    ds.attrs["deployment_end"] = str(end)
 
     try:
         os.mkdir(outdir)
     except:
         pass
-    id0 = ds.attrs['deployment_name']
-    outname = outdir + id0 + fnamesuffix + '.nc'
-    _log.info('writing %s', outname)
-    if 'units' in ds.time.attrs.keys():
-        ds.time.attrs.pop('units')
-    if 'calendar' in ds.time.attrs.keys():
-        ds.time.attrs.pop('calendar')
-    if 'ad2cp_time' in list(ds):
-        if 'units' in ds.ad2cp_time.attrs.keys():
-            ds.ad2cp_time.attrs.pop('units')
+    id0 = ds.attrs["deployment_name"]
+    outname = outdir + id0 + fnamesuffix + ".nc"
+    _log.info("writing %s", outname)
+    if "units" in ds.time.attrs.keys():
+        ds.time.attrs.pop("units")
+    if "calendar" in ds.time.attrs.keys():
+        ds.time.attrs.pop("calendar")
+    if "ad2cp_time" in list(ds):
+        if "units" in ds.ad2cp_time.attrs.keys():
+            ds.ad2cp_time.attrs.pop("units")
     ds.to_netcdf(
         outname,
-        'w',
+        "w",
         encoding={
-            'time': {'units': 'seconds since 1970-01-01T00:00:00Z', 'dtype': 'float64'}
+            "time": {"units": "seconds since 1970-01-01T00:00:00Z", "dtype": "float64"}
         },
     )
     return outname
@@ -580,4 +584,4 @@ def raw_to_timeseries(
 raw_to_L1timeseries = raw_to_L0timeseries = raw_to_timeseries
 merge_rawnc = merge_parquet
 
-__all__ = ['raw_to_rawnc', 'merge_parquet', 'raw_to_timeseries']
+__all__ = ["raw_to_rawnc", "merge_parquet", "raw_to_timeseries"]
