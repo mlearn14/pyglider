@@ -1003,9 +1003,236 @@ def binary_to_timeseries(
         )
 
     try:
-        os.mkdir(outdir)
+        os.mkdirs(outdir, exist_ok=True)
+    except Exception as e:
+        _log.warning(f"Could not create output directory {outdir}: {e}")
+    outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
+    _log.info("writing %s", outname)
+    # convert time back to float64 seconds for ERDDAP etc happiness, as they won't take ns
+    # as a unit:
+    ds.to_netcdf(
+        outname,
+        "w",
+        encoding={
+            "time": {
+                "units": "seconds since 1970-01-01T00:00:00Z",
+                "_FillValue": np.nan,
+                "dtype": "float64",
+            }
+        },
+    )
+
+    return outname
+
+
+def binary_to_profiles(
+    indir,
+    cachedir,
+    outdir,
+    deploymentyaml,
+    *,
+    search="*.[D|E]BD",
+    fnamesuffix="",
+    time_base="sci_water_temp",
+    profile_filt_time=100,
+    profile_min_time=300,
+    maxgap=300,
+    replace_attrs=None,
+):
+    """
+    Convert directly from binary files to netcdf profile files.  Requires
+    dbdreader to be installed.
+
+    Parameters
+    ----------
+    indir : string
+        Directory with binary files from the glider.
+
+    cachedir : string
+        Directory with glider cache files (cac files)
+
+    outdir : string
+        Directory to put the merged timeseries files.
+
+    deploymentyaml : str or list
+        Name of YAML text file with deployment information for this glider.
+
+        If a list, then the YAML files are read in order, and any top-level dictionaries
+        are overwritten from the previous YAMLs.  The advantage of this is that it allows
+        metadata that is common to multiple ways of processing the data come from the
+        first file, and then subsequent files change "netcdf_variables" if desired.
+
+    search : string
+        File suffix search pattern for dbdreader to find the binary files.
+
+    fnamesuffix : string
+        Suffix to add to the output file name. e.g. fnamesuffix = _raw => "*deploymentname*_raw.nc"
+
+    time_base : string
+        Name of the parameter to use as the time base.
+
+    profile_filt_time : float or None
+        time in seconds over which to smooth the pressure time series for
+        finding up and down profiles (note, doesn't filter the data that is
+        saved).  If None, then do not find profiles.
+
+    profile_min_time : float or None
+        minimum time to consider a profile an actual profile (seconds).  If None,
+        then do not find profiles.
+
+    maxgap : float
+        Longest gap in seconds to interpolate over when matching instrument
+        timeseries.
+
+    replace_attrs : dict or None
+        replace global attributes in the metadata after reading the metadata
+        file in.  Helpful when processing runs with only a couple things that
+        change.
+
+    Returns
+    -------
+    outname : string
+        name of the new merged netcdf file. TODO: Not sure what to do with this here
+    """
+
+    if not have_dbdreader:
+        raise ImportError("Cannot import dbdreader")
+
+    deployment = utils._get_deployment(deploymentyaml)
+    if replace_attrs:
+        for att in replace_attrs:
+            deployment["metadata"][att] = replace_attrs[att]
+
+    ncvar = deployment["netcdf_variables"]
+    device_data = deployment["instruments"]
+    thenames = list(ncvar.keys())
+    thenames.remove("time")
+
+    # build a new data set based on info in `deployment.`
+    # We will use ebd.m_present_time as the interpolant if the
+    # variable is in dbd.
+    ds = xr.Dataset()
+    attr = {}
+    name = "time"
+    for atts in ncvar[name].keys():
+        if (atts != "coordinates") & (atts != "units") & (atts != "calendar"):
+            attr[atts] = ncvar[name][atts]
+    sensors = [time_base]
+
+    baseind = None
+    for nn, name in enumerate(thenames):
+        sensorname = ncvar[name]["source"]
+        if not sensorname == time_base:
+            sensors.append(sensorname)
+        else:
+            baseind = nn
+    if not baseind:
+        raise RuntimeError("no time source specified.")
+
+    # get the dbd file
+    _log.info(f"{indir}/{search}")
+    dbd = dbdreader.MultiDBD(pattern=f"{indir}/{search}", cacheDir=cachedir)
+    # get the data, with `time_base` as the time source that
+    # all other variables are synced to:
+    data = list(dbd.get_sync(*sensors))
+    # get the time:
+    time = data.pop(0)
+    ds["time"] = (("time"), time, attr)
+    ds["latitude"] = (("time"), np.zeros(len(time)))
+    ds["longitude"] = (("time"), np.zeros(len(time)))
+    # get the time_base data:
+    basedata = data.pop(0)
+    # slot the time_base variable into the right place in the
+    # data list:
+    data.insert(baseind, basedata)
+
+    for nn, name in enumerate(thenames):
+        _log.info("working on %s", name)
+        if "method" in ncvar[name].keys():
+            continue
+        # variables that are in the data set or can be interpolated from it
+        if "conversion" in ncvar[name].keys():
+            convert = getattr(utils, ncvar[name]["conversion"])
+        else:
+            convert = utils._passthrough
+
+        sensorname = ncvar[name]["source"]
+        _log.info("names: %s %s", name, sensorname)
+        if sensorname in dbd.parameterNames["sci"]:
+            _log.debug("Sci sensorname %s", sensorname)
+            val = data[nn]
+
+            # interpolate only over those gaps that are smaller than 'maxgap'
+            # in seconds
+            _t, _ = dbd.get(ncvar[name]["source"])
+            tg_ind = utils.find_gaps(_t, time, maxgap)
+            val[tg_ind] = np.nan
+            _log.debug("number of gaps %s", np.count_nonzero(tg_ind))
+
+            val = utils._zero_screen(val)
+            val = convert(val)
+        elif sensorname in dbd.parameterNames["eng"]:
+            _log.debug("Eng sensorname %s", sensorname)
+            val = data[nn]
+            val = convert(val)
+            ncvar["method"] = "linear fill"
+        else:
+            ValueError(f"{sensorname} not in science or eng parameter names")
+
+        # make the attributes:
+        ncvar[name]["coordinates"] = "time"
+        attrs = ncvar[name]
+        attrs = utils.fill_required_attrs(attrs)
+        ds[name] = (("time"), val, attrs)
+
+    if "pressure" in ds:
+        _log.info(f"Getting glider depths")
+        _log.debug(ds)
+        _log.debug(f"HERE, {ds.pressure[0:100]}")
+        ds = utils.get_glider_depth(ds)
+        _log.debug(ds.depth.values[:100])
+        _log.debug(ds.depth.values[2000:2100])
+    try:
+        ds = utils.get_distance_over_ground(ds)
     except:
         pass
+
+    if ("temperature" in ds) and ("conductivity" in ds) and ("pressure" in ds):
+        ds = utils.get_derived_eos_raw(ds)
+
+    # screen out-of-range times; these won't convert:
+    ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
+    # convert time to datetime64:
+    ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
+    ds["time"].attrs = attr
+
+    ds = utils.fill_metadata(ds, deployment["metadata"], device_data)
+
+    _log.debug("Long")
+    _log.debug(ds.longitude.values[-2000:])
+
+    if (profile_filt_time is not None) and (profile_min_time is not None):
+        ds = utils.get_profiles_new(
+            ds, filt_time=profile_filt_time, profile_min_time=profile_min_time
+        )
+
+    try:
+        os.mkdirs(outdir, exist_ok=True)
+    except Exception as e:
+        _log.warning(f"Could not create output directory {outdir}: {e}")
+
+    # TODO: Figure out what deployment_name should be!
+    print(f"ds.attrs['deployment_name']: {ds.attrs['deployment_name']}")
+
+    # group by profile_index
+    grouped = ds.groupby("profile_index")
+    written = []
+
+    for i, (pid, prof) in enumerate(grouped):
+        profile_name = (
+            f"{ds.attrs["deployment_name"]}-"  # TODO: edit once above is figured out
+        )
+
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
     # convert time back to float64 seconds for ERDDAP etc happiness, as they won't take ns
