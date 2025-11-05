@@ -166,7 +166,7 @@ def get_profiles(ds, min_dp=10.0, inversion=3.0, filt_length=7, min_nsamples=14)
     return ds
 
 
-def get_profiles_new(ds, min_dp=10.0, filt_time=100, profile_min_time=300):
+def get_profiles_new(ds, min_dp=10.0, filt_time=100, profile_min_time=300, _log=_log):
     """
     Find profiles in a glider timeseries:
 
