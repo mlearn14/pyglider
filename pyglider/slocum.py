@@ -1038,6 +1038,7 @@ def binary_to_profiles(
     profile_min_time=300,
     maxgap=300,
     replace_attrs=None,
+    logger=None,
 ):
     """
     Convert directly from binary files to netcdf profile files.  Requires
@@ -1089,14 +1090,20 @@ def binary_to_profiles(
         file in.  Helpful when processing runs with only a couple things that
         change.
 
+    logger : logging.Logger or None
+        Logger to use.
+
     Returns
     -------
     outname : string
-        name of the new merged netcdf file. TODO: Not sure what to do with this here
+        name of the new merged netcdf file. TODO: Not sure what to do with this here. List of strings?
     """
 
     if not have_dbdreader:
         raise ImportError("Cannot import dbdreader")
+
+    if logger is not None:
+        _log = logger
 
     deployment = utils._get_deployment(deploymentyaml)
     if replace_attrs:
@@ -1217,12 +1224,16 @@ def binary_to_profiles(
         )
 
     try:
-        os.mkdirs(outdir, exist_ok=True)
+        os.makedirs(outdir, exist_ok=True)
     except Exception as e:
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
-    # TODO: Figure out what deployment_name should be!
-    print(f"ds.attrs['deployment_name']: {ds.attrs['deployment_name']}")
+    # get glider_name
+    glider_name = ds.attrs["deployment_name"].split("-")[0]
+
+    # print out all ds.attrs
+    for k, v in ds.attrs.items():
+        _log.info(f"{k}: {v}")
 
     # group by profile_index
     grouped = ds.groupby("profile_index")
@@ -1230,7 +1241,7 @@ def binary_to_profiles(
 
     for i, (pid, prof) in enumerate(grouped):
         profile_name = (
-            f"{ds.attrs["deployment_name"]}-"  # TODO: edit once above is figured out
+            f"{glider_name}-"  # TODO: edit once above is figured out
         )
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
