@@ -21,6 +21,7 @@ import time
 import xml.etree.ElementTree as ET
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 import pyglider.utils as utils
@@ -1038,7 +1039,7 @@ def binary_to_profiles(
     profile_min_time=300,
     maxgap=300,
     replace_attrs=None,
-    logger=None,
+    _log=_log,
 ):
     """
     Convert directly from binary files to netcdf profile files.  Requires
@@ -1101,9 +1102,6 @@ def binary_to_profiles(
 
     if not have_dbdreader:
         raise ImportError("Cannot import dbdreader")
-
-    if logger is not None:
-        _log = logger
 
     deployment = utils._get_deployment(deploymentyaml)
     if replace_attrs:
@@ -1220,7 +1218,10 @@ def binary_to_profiles(
 
     if (profile_filt_time is not None) and (profile_min_time is not None):
         ds = utils.get_profiles_new(
-            ds, filt_time=profile_filt_time, profile_min_time=profile_min_time
+            ds,
+            filt_time=profile_filt_time,
+            profile_min_time=profile_min_time,
+            _log=_log,
         )
 
     try:
@@ -1228,39 +1229,53 @@ def binary_to_profiles(
     except Exception as e:
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
-    # get glider_name
+    # keep only valid profiles
+    valid_idx = np.where(ds.profile_index > 0)[0]
+    ds_profiles = ds.isel(time=valid_idx)
+
+    # get glider name
     glider_name = ds.attrs["deployment_name"].split("-")[0]
 
-    # print out all ds.attrs
-    for k, v in ds.attrs.items():
-        _log.info(f"{k}: {v}")
+    # convert time to unix for numpy happiness
+    ds_profiles["time"] = (
+        ds_profiles["time"].values.astype("datetime64[s]").astype("float64")
+    )
+    _log.debug(f"ds_profiles.time.values[0]: {ds_profiles.time.values[0]}")
 
-    # group by profile_index
-    grouped = ds.groupby("profile_index")
+    # Group by profile_index and compute the mean time for each profile to get the profile names
+    median_times = ds_profiles.time.groupby(ds_profiles["profile_index"]).median()
+    median_times = pd.to_datetime(median_times.values, unit="s", utc=True)
+    pnames = [
+        f"{glider_name}-{t}{fnamesuffix}.nc"
+        for t in median_times.strftime("%Y%m%dT%H%M")
+    ]
+
+    # get each profile and save to netcdf with proper name
     written = []
+    indexes = np.unique(ds_profiles.profile_index.values)
+    for idx, pn in zip(indexes, pnames):
+        valid_idx = np.where(ds_profiles.profile_index == int(idx))[0]
+        profile = ds_profiles.isel(time=valid_idx)
 
-    for i, (pid, prof) in enumerate(grouped):
-        profile_name = (
-            f"{glider_name}-"  # TODO: edit once above is figured out
+        outpath = os.path.join(outdir, pn)
+        _log.info(f"Writing profile {pn} to {outpath}")
+
+        profile.to_netcdf( # FIXME: why doesn't this work? something to do with the encoding.
+            outpath,
+            mode="w",
+            encoding={
+                "time": {
+                    "units": "seconds since 1970-01-01T00:00:00Z",
+                    "_FillValue": np.nan,
+                    "dtype": "float64",
+                }
+            },
         )
 
-    outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
-    _log.info("writing %s", outname)
-    # convert time back to float64 seconds for ERDDAP etc happiness, as they won't take ns
-    # as a unit:
-    ds.to_netcdf(
-        outname,
-        "w",
-        encoding={
-            "time": {
-                "units": "seconds since 1970-01-01T00:00:00Z",
-                "_FillValue": np.nan,
-                "dtype": "float64",
-            }
-        },
-    )
+        written.append(outpath)
 
-    return outname
+    _log.info(f"Wrote {len(written)} profiles to {outdir}")
+    return written
 
 
 # alias:
