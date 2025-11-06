@@ -1250,6 +1250,10 @@ def binary_to_profiles(
         for t in median_times.strftime("%Y%m%dT%H%M")
     ]
 
+    # convert times back to datetime64
+    ds_profiles["time"] = (ds_profiles.time * 1e9).astype("datetime64[ns]")
+    _log.debug(f"converted ds_profiles.time.values[0]: {ds_profiles.time.values[0]}")
+
     # get each profile and save to netcdf with proper name
     written = []
     indexes = np.unique(ds_profiles.profile_index.values)
@@ -1260,7 +1264,7 @@ def binary_to_profiles(
         outpath = os.path.join(outdir, pn)
         _log.info(f"Writing profile {pn} to {outpath}")
 
-        profile.to_netcdf( # FIXME: why doesn't this work? something to do with the encoding.
+        profile.to_netcdf(
             outpath,
             mode="w",
             encoding={
