@@ -1,9 +1,10 @@
 """
 Routines to convert raw slocum dinkum files to netcdf timeseries.
-
+Modified by Lori Garzio 5/19/2025
+Last Modified 8/7/2025
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import bitstring
 
@@ -38,6 +39,7 @@ def binary_to_rawnc(
     incremental=True,
     scisuffix="EBD",
     glidersuffix="DBD",
+    _log=_log,
 ):
     """
     Convert slocum binary data (*.ebd/*.dbd) to raw netcdf files.
@@ -82,11 +84,13 @@ def binary_to_rawnc(
     -----
     This process can be slow for many files.
     """
-    d = indir + "*." + scisuffix
+    # d = indir + '*.' + scisuffix
+    d = os.path.join(indir, "*." + scisuffix)
     filesScience = glob.glob(d)
     filesScience.sort()
 
-    d = indir + "*." + glidersuffix
+    # d = indir + '*.' + glidersuffix
+    d = os.path.join(indir, "*." + glidersuffix)
     filesMain = glob.glob(d)
     filesMain.sort()
 
@@ -110,8 +114,11 @@ def binary_to_rawnc(
             try:
                 fmeta, _ = dbd_get_meta(filen, cachedir=cacdir)
                 path, ext = os.path.splitext(filen)
+                # fncname = (
+                #     fmeta['the8x3_filename'] + '.' + fmeta['filename_extension'] + '.nc'
+                # )
                 fncname = (
-                    fmeta["the8x3_filename"] + "." + fmeta["filename_extension"] + ".nc"
+                    fmeta["full_filename"] + "." + fmeta["filename_extension"] + ".nc"
                 )
                 fullfncname = outdir + "/" + fncname
 
@@ -789,12 +796,19 @@ def raw_to_timeseries(
     ds = ds.assign_coords(latitude=ds.latitude)
     ds = ds.assign_coords(depth=ds.depth)
 
-    ds["time"] = (
-        ds.time.values.astype("timedelta64[s]") + np.datetime64("1970-01-01T00:00:00")
-    ).astype("datetime64[ns]")
+    # Lori edit: don't convert time
+    # ds['time'] = (
+    #     ds.time.values.astype('timedelta64[s]') + np.datetime64('1970-01-01T00:00:00')
+    # ).astype('datetime64[ns]')
     ds = utils.fill_metadata(ds, deployment["metadata"], device_data)
-    start = ds["time"].values[0]
-    end = ds["time"].values[-1]
+    # start = ds['time'].values[0]
+    # end = ds['time'].values[-1]
+    start = np.nanmin(ds.time.values).astype("timedelta64[s]") + np.datetime64(
+        "1970-01-01T00:00:00"
+    ).astype("datetime64[ns]")
+    end = np.nanmax(ds.time.values).astype("timedelta64[s]") + np.datetime64(
+        "1970-01-01T00:00:00"
+    ).astype("datetime64[ns]")
 
     ds.attrs["deployment_start"] = str(start)
     ds.attrs["deployment_end"] = str(end)
@@ -805,6 +819,11 @@ def raw_to_timeseries(
     )
     _log.debug(ds.depth.values[:100])
     _log.debug(ds.depth.values[2000:2100])
+
+    # Lori: now convert times
+    ds["time"] = (
+        ds.time.values.astype("timedelta64[s]") + np.datetime64("1970-01-01T00:00:00")
+    ).astype("datetime64[ns]")
 
     try:
         os.mkdir(outdir)
@@ -819,6 +838,277 @@ def raw_to_timeseries(
         id0 = ds.attrs["deployment_name"]
 
     return outname
+
+
+def raw_segment_to_timeseries(
+    indir,
+    outdir,
+    deploymentyaml,
+    logging,
+    *,
+    profile_filt_time=100,
+    profile_min_time=300,
+    segment=None,
+):
+    """
+    **Lori edit:**
+    This is a copy of the raw_to_timeseries function, but it
+    creates a merged .nc file for each debd.nc pair (segment) rather than
+    a single merged file for the entire deployment.
+    Parameters
+    ----------
+    indir : string
+        Directory with raw netcdf files.
+    outdir : string
+        Directory to put the merged timeseries files.
+    profile_filt_time : float
+        time in seconds over which to smooth the pressure time series for
+        finding up and down profiles (note, doesn't filter the data that is
+        saved)
+    profile_min_time : float
+        minimum time to consider a profile an actual profile (seconds)
+    logging : object
+        logging object to use for logging messages.
+    segment : string
+        The segment ID
+    """
+
+    deployment = utils._get_deployment(deploymentyaml)
+    metadata = deployment["metadata"]
+    ncvar = deployment["netcdf_variables"]
+    # device_data = deployment['glider_devices']
+    device_data = dict()
+    thenames = list(ncvar.keys())
+    thenames.remove("time")
+
+    # id = metadata['glider_name'] + metadata['glider_serial']
+
+    id0 = None
+    ds = None
+    filename = None
+
+    # ebdn = indir + '/' + id + 'rawebd.nc'
+    # dbdn = indir + '/' + id + 'rawdbd.nc'
+    # _log.debug(f'{ebdn}, {dbdn}')
+    # if not os.path.exists(ebdn) or not os.path.exists(dbdn):
+    #     raise FileNotFoundError('Could not find %s and %s', ebdn, dbdn)
+
+    # _log.info('Opening:', ebdn, dbdn)
+    # ebd = xr.open_dataset(ebdn, decode_times=False)
+    # dbd = xr.open_dataset(dbdn, decode_times=False)
+    # _log.debug(f'DBD, {dbd}, {dbd.m_depth}')
+    # if len(ebd.time) <= 2:
+    #     raise RuntimeError('Science file has no data')
+
+    if outdir.split("/")[-2] == "delayed":
+        scisuffix = "ebd"
+        glidersuffix = "dbd"
+    elif outdir.split("/")[-2] == "rt":
+        scisuffix = "tbd"
+        glidersuffix = "sbd"
+    else:
+        logging.error(
+            f'Invalid mode: {outdir.split("/")[-1]} in {outdir}. Must be "delayed" or "rt".'
+        )
+        return ds, filename
+    ebdn = os.path.join(indir, segment + f".{scisuffix}.nc")  # science
+    dbdn = os.path.join(indir, segment + f".{glidersuffix}.nc")  # flight
+
+    logging.info(
+        f"Attempting to merge {segment + f'.{glidersuffix}.nc'} and {segment + f'.{scisuffix}.nc'} files"
+    )
+
+    try:
+        ebd = xr.open_dataset(ebdn, decode_times=False)
+        if len(ebd["_ind"]) <= 1:
+            ebd = None
+            logging.info(f"{scisuffix.upper()} (science) file for {segment} is empty")
+    except FileNotFoundError:
+        ebd = None
+        logging.info(f"{scisuffix.upper()} (science) file not available for {segment}")
+    try:
+        dbd = xr.open_dataset(dbdn, decode_times=False)
+        if len(dbd["_ind"]) <= 1:
+            dbd = None
+            logging.info(f"{glidersuffix.upper()} (flight) file for {segment} is empty")
+    except FileNotFoundError:
+        dbd = None
+        logging.info(
+            f"{glidersuffix.upper()} (flight) file not available for {segment}"
+        )
+
+    # check for data points before proceeding to generating files
+    if np.logical_and(ebd is None, dbd is None):
+        logging.info(f"No data available for {segment}, skipping file creation")
+        return ds, filename
+    if dbd is None:
+        logging.info(f"Flight data not available for segment {segment}, skipping file")
+        return ds, filename
+
+    try:
+        if np.logical_and(ebd is None, len(dbd["_ind"]) < 2):
+            logging.info(
+                f"Only {len(dbd['_ind'])} data points for segment {segment}, skipping file"
+            )
+            return ds, filename
+    except TypeError:
+        pass
+
+    # make filename ending based on the files being merged
+    if dbd is None:  # flight is missing
+        file_ending = f"{scisuffix}.nc"
+    elif ebd is None:  # science is missing
+        file_ending = f"{glidersuffix}.nc"
+    else:
+        file_ending = f"{glidersuffix[0]}{scisuffix[0]}bd.nc"
+
+    # build a new data set based on info in `deployment.`
+    # We will use ebd.m_present_time as the interpolant if the
+    # variable is in dbd.
+    ds = xr.Dataset()
+    attr = {}
+    name = "time"
+    for atts in ncvar[name].keys():
+        if atts != "coordinates":
+            attr[atts] = ncvar[name][atts]
+
+    try:
+        ds[name] = (
+            ("time"),
+            ebd[name].values,
+            attr,
+        )  # get times from science file, if it exists
+    except TypeError:
+        ds[name] = (("time"), dbd[name].values, attr)
+
+    for name in thenames:
+        _log.info("working on %s", name)
+        if "method" in ncvar[name].keys():
+            continue
+        # variables that are in the data set or can be interpolated from it
+        if "conversion" in ncvar[name].keys():
+            convert = getattr(utils, ncvar[name]["conversion"])
+        else:
+            convert = utils._passthrough
+        sensorname = ncvar[name]["source"]
+        _log.info("names: %s %s", name, sensorname)
+        try:
+            if sensorname in ebd.keys():
+                _log.debug("EBD sensorname %s", sensorname)
+                val = ebd[sensorname]
+                val = utils._zero_screen(val)
+                #        val[val==0] = np.nan
+                val = convert(val)
+            else:
+                _log.debug("DBD sensorname %s", sensorname)
+                val = convert(dbd[sensorname])
+                val = _dbd2ebd(dbd, ds, val)
+                ncvar["method"] = "linear fill"
+        except (
+            AttributeError,
+            KeyError,
+        ):  # if ebd isn't available, get the variables from the dbd
+            _log.debug("DBD sensorname %s", sensorname)
+            try:
+                val = convert(dbd[sensorname])
+                val = _dbd2ebd(dbd, ds, val)
+                ncvar["method"] = "linear fill"
+            except KeyError:  # fill the array with nans if the variable isn't available
+                _log.debug("DBD sensorname %s not available in the file", sensorname)
+                val = convert(dbd["time"])
+                val = _dbd2ebd(dbd, ds, val)
+                val[:] = np.nan
+
+        # repeat lat/lon if there is only one GPS hit in the trajectory file
+        if name in ["latitude", "longitude"]:
+            if np.sum(val) == 0:
+                t0 = datetime.fromtimestamp(np.nanmin(val.time.values))
+                t1 = datetime.fromtimestamp(np.nanmax(val.time.values))
+                diff = int(np.round((t1 - t0).total_seconds() / 60))
+
+                dd = convert(dbd[sensorname])
+                dd = dd[~np.isnan(dd)]
+                if (
+                    len(dd) == 0
+                ):  # exit if there are no GPS hits and don't write the .nc file
+                    logging.info(
+                        f"No GPS hits for segment {segment}, skipping file: {t0.strftime('%Y-%m-%d %H:%M:%S')} to {t1.strftime('%Y-%m-%d %H:%M:%S')}, ({diff} minutes, {len(val)} data points)"
+                    )
+                    ds = None
+                    filename = None
+                    return ds, filename
+                logging.info(
+                    f"Single GPS hit for segment {segment} ({name}), repeating coordinates instead of interpolating: {t0.strftime('%Y-%m-%d %H:%M:%S')} to {t1.strftime('%Y-%m-%d %H:%M:%S')}, ({diff} minutes, {len(val)} data points)"
+                )
+                val[:] = dd.values
+
+        # make the attributes:
+        ncvar[name].pop("coordinates", None)
+        attrs = ncvar[name]
+        attrs = utils.fill_required_attrs(attrs)
+        ds[name] = (("time"), val.data, attrs)
+
+    _log.debug(f"HERE, {ds}")
+    _log.debug(f"HERE, {ds.pressure[0:100]}")
+    # some derived variables:
+    # trim bad times...
+
+    # don't print the file if there is <2 data points
+    if len(ds.time) < 2:
+        logging.info(
+            f"Only {len(ds.time)} data point for segment {segment}, skipping file"
+        )
+        ds = None
+        filename = None
+        return ds, filename
+    ds = utils.get_glider_depth(ds)
+    # ds = utils.get_distance_over_ground(ds)
+
+    ds = utils.get_derived_eos_raw(ds)
+    ds = ds.assign_coords(longitude=ds.longitude)
+    ds = ds.assign_coords(latitude=ds.latitude)
+    ds = ds.assign_coords(depth=ds.depth)
+
+    # Lori edit: don't convert time
+    # ds['time'] = (
+    #     ds.time.values.astype('timedelta64[s]') + np.datetime64('1970-01-01T00:00:00')
+    # ).astype('datetime64[ns]')
+    ds = utils.fill_metadata(ds, deployment["metadata"], device_data)
+    # start = ds['time'].values[0]
+    # end = ds['time'].values[-1]
+    start = np.nanmin(ds.time.values).astype("timedelta64[s]") + np.datetime64(
+        "1970-01-01T00:00:00"
+    ).astype("datetime64[ns]")
+    end = np.nanmax(ds.time.values).astype("timedelta64[s]") + np.datetime64(
+        "1970-01-01T00:00:00"
+    ).astype("datetime64[ns]")
+    startstr = datetime.utcfromtimestamp(
+        start.astype("datetime64[s]").astype(int)
+    ).strftime("%Y%m%dT%H%M")
+    endstr = datetime.utcfromtimestamp(
+        end.astype("datetime64[s]").astype(int)
+    ).strftime("%Y%m%dT%H%M")
+
+    # ds.attrs['deployment_start'] = str(start)
+    # ds.attrs['deployment_end'] = str(end)
+    _log.debug(ds.depth.values[:100])
+    _log.debug(ds.depth.values[2000:2100])
+
+    # index profiles
+    ds = utils.get_profiles_new(
+        ds, filt_time=profile_filt_time, profile_min_time=profile_min_time
+    )
+    _log.debug(ds.depth.values[:100])
+    _log.debug(ds.depth.values[2000:2100])
+
+    # Lori edit: now convert times
+    ds["time"] = (
+        ds.time.values.astype("timedelta64[s]") + np.datetime64("1970-01-01T00:00:00")
+    ).astype("datetime64[ns]")
+
+    filename = f'{metadata["glider_name"]}_{startstr}_{endstr}_{segment}_{file_ending}'
+
+    return ds, filename
 
 
 def binary_to_timeseries(
@@ -895,6 +1185,10 @@ def binary_to_timeseries(
     thenames = list(ncvar.keys())
     thenames.remove("time")
 
+    # get the dbd file
+    _log.info(f"{indir}/{search}")
+    dbd = dbdreader.MultiDBD(pattern=f"{indir}/{search}", cacheDir=cachedir)
+
     # build a new data set based on info in `deployment.`
     # We will use ebd.m_present_time as the interpolant if the
     # variable is in dbd.
@@ -906,19 +1200,13 @@ def binary_to_timeseries(
             attr[atts] = ncvar[name][atts]
     sensors = [time_base]
 
-    baseind = None
     for nn, name in enumerate(thenames):
         sensorname = ncvar[name]["source"]
         if not sensorname == time_base:
             sensors.append(sensorname)
         else:
             baseind = nn
-    if not baseind:
-        raise RuntimeError("no time source specified.")
 
-    # get the dbd file
-    _log.info(f"{indir}/{search}")
-    dbd = dbdreader.MultiDBD(pattern=f"{indir}/{search}", cacheDir=cachedir)
     # get the data, with `time_base` as the time source that
     # all other variables are synced to:
     data = list(dbd.get_sync(*sensors))
@@ -954,7 +1242,6 @@ def binary_to_timeseries(
             _t, _ = dbd.get(ncvar[name]["source"])
             tg_ind = utils.find_gaps(_t, time, maxgap)
             val[tg_ind] = np.nan
-            _log.debug("number of gaps %s", np.count_nonzero(tg_ind))
 
             val = utils._zero_screen(val)
             val = convert(val)
@@ -972,20 +1259,13 @@ def binary_to_timeseries(
         attrs = utils.fill_required_attrs(attrs)
         ds[name] = (("time"), val, attrs)
 
-    if "pressure" in ds:
-        _log.info(f"Getting glider depths")
-        _log.debug(ds)
-        _log.debug(f"HERE, {ds.pressure[0:100]}")
-        ds = utils.get_glider_depth(ds)
-        _log.debug(ds.depth.values[:100])
-        _log.debug(ds.depth.values[2000:2100])
-    try:
-        ds = utils.get_distance_over_ground(ds)
-    except:
-        pass
+    _log.info(f"Getting glider depths, {ds}")
+    _log.debug(f"HERE, {ds.pressure[0:100]}")
 
-    if ("temperature" in ds) and ("conductivity" in ds) and ("pressure" in ds):
-        ds = utils.get_derived_eos_raw(ds)
+    ds = utils.get_glider_depth(ds)
+    ds = utils.get_distance_over_ground(ds)
+
+    ds = utils.get_derived_eos_raw(ds)
 
     # screen out-of-range times; these won't convert:
     ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
@@ -995,18 +1275,27 @@ def binary_to_timeseries(
 
     ds = utils.fill_metadata(ds, deployment["metadata"], device_data)
 
+    start = ds.time.values[0]
+    end = ds.time.values[-1]
     _log.debug("Long")
     _log.debug(ds.longitude.values[-2000:])
+    # make sure this is ISO readable....
+    ds.attrs["deployment_start"] = str(start)[:19]
+    ds.attrs["deployment_end"] = str(end)[:19]
+    _log.debug(ds.depth.values[:100])
+    _log.debug(ds.depth.values[2000:2100])
 
     if (profile_filt_time is not None) and (profile_min_time is not None):
         ds = utils.get_profiles_new(
             ds, filt_time=profile_filt_time, profile_min_time=profile_min_time
         )
+    _log.debug(ds.depth.values[:100])
+    _log.debug(ds.depth.values[2000:2100])
 
     try:
-        os.mkdirs(outdir, exist_ok=True)
-    except Exception as e:
-        _log.warning(f"Could not create output directory {outdir}: {e}")
+        os.mkdir(outdir)
+    except:
+        pass
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
     # convert time back to float64 seconds for ERDDAP etc happiness, as they won't take ns
@@ -1279,6 +1568,35 @@ def binary_to_profiles(
         written.append(outpath)
 
     _log.info(f"Wrote {len(written)} profiles to {outdir}")
+
+    # debugging, write timeseries to netcdf:
+    # TODO: Delete when done
+    ds_outname = "/home/gsb/projects/sbuglider/data/o_timeseries.nc"
+    ds.to_netcdf(
+        ds_outname,
+        "w",
+        encoding={
+            "time": {
+                "units": "seconds since 1970-01-01T00:00:00Z",
+                "_FillValue": np.nan,
+                "dtype": "float64",
+            }
+        },
+    )
+
+    dsp_outname = "/home/gsb/projects/sbuglider/data/p_timeseries.nc"
+    ds_profiles.to_netcdf(
+        dsp_outname,
+        "w",
+        encoding={
+            "time": {
+                "units": "seconds since 1970-01-01T00:00:00Z",
+                "_FillValue": np.nan,
+                "dtype": "float64",
+            }
+        },
+    )
+
     return written
 
 
@@ -1399,18 +1717,11 @@ def parse_logfiles(files):
                 if ll.startswith("   sensor:m_lithium_battery_relative_charge"):
                     pattern = r"=(\d+\.\d+)"
                     match = re.search(pattern, ll)
-                    if match:
-                        relcharge[ntimes - 1] = float(match.group(1))
-                    else:
-                        relcharge[ntimes - 1] = relcharge[ntimes - 2]
+                    relcharge[ntimes - 1] = float(match.group(1))
                 if ll.startswith("   sensor:m_battery(volts)="):
                     pattern = r"=(\d+\.\d+)"
                     match = re.search(pattern, ll)
-                    if match:
-                        volts[ntimes - 1] = float(match.group(1))
-                    else:
-                        volts[ntimes - 1] = volts[ntimes - 2]
-
+                    volts[ntimes - 1] = float(match.group(1))
     amph = amph[:ntimes]
     gps = gps[:ntimes]
     times = times[:ntimes]
