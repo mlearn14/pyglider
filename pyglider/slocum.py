@@ -1539,30 +1539,31 @@ def binary_to_profiles(
     except Exception as e:
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
+    # TODO: Uncomment when done
     # get each profile and save to netcdf with proper name
-    written = []
-    pids = np.unique(ds_profiles.profile_id.values)
-    for pid, pn in zip(pids, pnames):
-        profile = ds_profiles.where(ds_profiles.profile_id == pid, drop=True)
+    # written = []
+    # pids = np.unique(ds_profiles.profile_id.values)
+    # for pid, pn in zip(pids, pnames):
+    #     profile = ds_profiles.where(ds_profiles.profile_id == pid, drop=True)
 
-        outpath = os.path.join(outdir, pn)
-        _log.info(f"Writing profile {pn} to {outpath}")
+    #     outpath = os.path.join(outdir, pn)
+    #     _log.info(f"Writing profile {pn} to {outpath}")
 
-        profile.to_netcdf(
-            outpath,
-            mode="w",
-            encoding={
-                "time": {
-                    "units": "seconds since 1970-01-01T00:00:00Z",
-                    "_FillValue": np.nan,
-                    "dtype": "float64",
-                }
-            },
-        )
+    #     profile.to_netcdf(
+    #         outpath,
+    #         mode="w",
+    #         encoding={
+    #             "time": {
+    #                 "units": "seconds since 1970-01-01T00:00:00Z",
+    #                 "_FillValue": np.nan,
+    #                 "dtype": "float64",
+    #             }
+    #         },
+    #     )
 
-        written.append(outpath)
+    #     written.append(outpath)
 
-    _log.info(f"Wrote {len(written)} profiles to {outdir}")
+    # _log.info(f"Wrote {len(written)} profiles to {outdir}")
 
     # debugging, write timeseries to netcdf:
     # TODO: Delete when done
@@ -1593,7 +1594,7 @@ def binary_to_profiles(
         },
     )
 
-    return written
+    # return written
 
 
 # alias:
