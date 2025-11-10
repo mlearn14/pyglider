@@ -1389,8 +1389,8 @@ def binary_to_profiles(
 
     Returns
     -------
-    outname : string
-        name of the new merged netcdf file. TODO: Not sure what to do with this here. List of strings?
+    written : list[string]
+        names of the new netcdf files.
     """
 
     if not have_dbdreader:
