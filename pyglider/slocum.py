@@ -1316,20 +1316,20 @@ def binary_to_timeseries(
 
 
 def binary_to_profiles(
-    indir,
-    cachedir,
-    outdir,
-    deploymentyaml,
+    indir: str,
+    cachedir: str,
+    outdir: str,
+    deploymentyaml: str | list,
     *,
-    search="*.[D|E]BD",
-    fnamesuffix="",
-    time_base="sci_water_temp",
-    profile_min_dp=15,
-    profile_filt_time=100,
-    profile_min_time=300,
-    maxgap=300,
-    replace_attrs=None,
-    _log=_log,
+    search: str = "*.[D|E]BD",
+    fnamesuffix: str = "",
+    time_base: str = "sci_water_temp",
+    profile_min_dp: float = 15,
+    profile_filt_time: int = 100,
+    profile_min_time: int = 300,
+    maxgap: float = 300,
+    replace_attrs: dict = None,
+    _log: logging.Logger = _log,
 ):
     """
     Convert directly from binary files to netcdf profile files.  Requires
