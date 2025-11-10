@@ -1330,7 +1330,7 @@ def binary_to_profiles(
     maxgap: float = 300,
     replace_attrs: dict = None,
     _log: logging.Logger = _log,
-):
+) -> list[str]:
     """
     Convert directly from binary files to netcdf profile files.  Requires
     dbdreader to be installed.
@@ -1362,7 +1362,7 @@ def binary_to_profiles(
 
     time_base : string
         Name of the parameter to use as the time base.
-    
+
     profile_min_dp : float or None
         Minimum distance a profile must transit to be considered a profile, in dbar.
 
@@ -1500,8 +1500,6 @@ def binary_to_profiles(
 
     # screen out-of-range times; these won't convert:
     ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
-    # convert time to datetime64:
-    ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
     ds["time"].attrs = attr
 
     ds = utils.fill_metadata(ds, deployment["metadata"], device_data)
@@ -1512,48 +1510,40 @@ def binary_to_profiles(
     if (profile_filt_time is not None) and (profile_min_time is not None):
         ds = utils.get_profiles_new(
             ds,
-            min_dp=profile_min_dp
+            min_dp=profile_min_dp,
             filt_time=profile_filt_time,
             profile_min_time=profile_min_time,
             _log=_log,
         )
 
-    try:
-        os.makedirs(outdir, exist_ok=True)
-    except Exception as e:
-        _log.warning(f"Could not create output directory {outdir}: {e}")
-
     # keep only valid profiles
-    valid_idx = np.where(ds.profile_index > 0)[0]
+    valid_idx = np.where(ds.profile_id > 0)[0]
     ds_profiles = ds.isel(time=valid_idx)
 
     # get glider name
     glider_name = ds.attrs["deployment_name"].split("-")[0]
 
-    # convert time to unix for numpy happiness
-    ds_profiles["time"] = (
-        ds_profiles["time"].values.astype("datetime64[s]").astype("float64")
-    )
-    _log.debug(f"ds_profiles.time.values[0]: {ds_profiles.time.values[0]}")
-
-    # Group by profile_index and compute the mean time for each profile to get the profile names
-    median_times = ds_profiles.time.groupby(ds_profiles["profile_index"]).median()
-    median_times = pd.to_datetime(median_times.values, unit="s", utc=True)
+    # Group by profile_id and compute the mean time for each profile to get the profile names
+    mean_times = ds_profiles.time.groupby(ds_profiles["profile_id"]).mean()
+    mean_times = pd.to_datetime(mean_times.values, unit="s", utc=True)
     pnames = [
-        f"{glider_name}-{t}{fnamesuffix}.nc"
-        for t in median_times.strftime("%Y%m%dT%H%M")
+        f"{glider_name}-{t}{fnamesuffix}.nc" for t in mean_times.strftime("%Y%m%dT%H%M")
     ]
 
-    # convert times back to datetime64
+    # now convert times to datetime64
     ds_profiles["time"] = (ds_profiles.time * 1e9).astype("datetime64[ns]")
-    _log.debug(f"converted ds_profiles.time.values[0]: {ds_profiles.time.values[0]}")
+
+    # create output directory
+    try:
+        os.makedirs(outdir, exist_ok=True)
+    except Exception as e:
+        _log.warning(f"Could not create output directory {outdir}: {e}")
 
     # get each profile and save to netcdf with proper name
     written = []
-    indexes = np.unique(ds_profiles.profile_index.values)
-    for idx, pn in zip(indexes, pnames):
-        valid_idx = np.where(ds_profiles.profile_index == int(idx))[0]
-        profile = ds_profiles.isel(time=valid_idx)
+    pids = np.unique(ds_profiles.profile_id.values)
+    for pid, pn in zip(pids, pnames):
+        profile = ds_profiles.where(ds_profiles.profile_id == pid, drop=True)
 
         outpath = os.path.join(outdir, pn)
         _log.info(f"Writing profile {pn} to {outpath}")
@@ -1576,6 +1566,7 @@ def binary_to_profiles(
 
     # debugging, write timeseries to netcdf:
     # TODO: Delete when done
+    ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
     ds_outname = "/home/gsb/projects/sbuglider/data/o_timeseries.nc"
     ds.to_netcdf(
         ds_outname,
