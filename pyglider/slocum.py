@@ -1324,6 +1324,7 @@ def binary_to_profiles(
     search="*.[D|E]BD",
     fnamesuffix="",
     time_base="sci_water_temp",
+    profile_min_dp=15,
     profile_filt_time=100,
     profile_min_time=300,
     maxgap=300,
@@ -1361,6 +1362,9 @@ def binary_to_profiles(
 
     time_base : string
         Name of the parameter to use as the time base.
+    
+    profile_min_dp : float or None
+        Minimum distance a profile must transit to be considered a profile, in dbar.
 
     profile_filt_time : float or None
         time in seconds over which to smooth the pressure time series for
@@ -1508,6 +1512,7 @@ def binary_to_profiles(
     if (profile_filt_time is not None) and (profile_min_time is not None):
         ds = utils.get_profiles_new(
             ds,
+            min_dp=profile_min_dp
             filt_time=profile_filt_time,
             profile_min_time=profile_min_time,
             _log=_log,
