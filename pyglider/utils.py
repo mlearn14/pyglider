@@ -412,7 +412,7 @@ def remove_short_profiles(ds: xr.Dataset, n_samples=150):
 
 
 def check_profile_time_diff(
-    ds: xr.Dataset, threshold: float = 30.0, epochs: int = 50
+    ds: xr.Dataset, threshold: float = 30.0, epochs: int = 50, _log=_log
 ) -> xr.Dataset:
     """
     Removes points where time gaps (before or after) exceed the threshold (seconds). Returns a filtered xr.Dataset
@@ -425,6 +425,8 @@ def check_profile_time_diff(
         Maximum time gap (seconds), by default 30.0
     epochs (int)
         Number of epochs to check, by default 50. Recommended to use 25-50.
+    _log (logging.Logger)
+        Logger, by default _log
     """
     # ensure time is sorted
     ds_working = ds.copy()
