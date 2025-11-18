@@ -1329,7 +1329,7 @@ def binary_to_profiles(
     profile_min_time: int = 300,
     maxgap: float = 300,
     min_samples: int = 75,
-    gap_threshold: float = 30.0,
+    gap_threshold: int = 30,
     replace_attrs: dict = None,
     _log: logging.Logger = _log,
 ) -> list[str]:
@@ -1384,7 +1384,7 @@ def binary_to_profiles(
     min_samples : int
         Minimum number of samples in a profile.
 
-    gap_threshold : float
+    gap_threshold : int
         Minimum gap in seconds in a profile to be considered a gap.
 
     replace_attrs : dict or None
@@ -1543,7 +1543,9 @@ def binary_to_profiles(
 
     # perform additional checks on the data
     ds_profiles = utils.remove_short_profiles(ds_profiles, n_samples=min_samples)
-    ds_profiles = utils.check_profile_time_diff(ds_profiles, threshold=gap_threshold, _log=_log)
+    ds_profiles = utils.check_profile_time_diff(
+        ds_profiles, gap_threshold=gap_threshold, _log=_log
+    )
 
     # create output directory
     try:
