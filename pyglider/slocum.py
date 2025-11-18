@@ -1328,6 +1328,8 @@ def binary_to_profiles(
     profile_filt_time: int = 100,
     profile_min_time: int = 300,
     maxgap: float = 300,
+    min_samples: int = 75,
+    gap_threshold: float = 30.0,
     replace_attrs: dict = None,
     _log: logging.Logger = _log,
 ) -> list[str]:
@@ -1378,6 +1380,12 @@ def binary_to_profiles(
     maxgap : float
         Longest gap in seconds to interpolate over when matching instrument
         timeseries.
+
+    min_samples : int
+        Minimum number of samples in a profile.
+
+    gap_threshold : float
+        Minimum gap in seconds in a profile to be considered a gap.
 
     replace_attrs : dict or None
         replace global attributes in the metadata after reading the metadata
@@ -1532,6 +1540,10 @@ def binary_to_profiles(
 
     # now convert times to datetime64
     ds_profiles["time"] = (ds_profiles.time * 1e9).astype("datetime64[ns]")
+
+    # perform additional checks on the data
+    ds_profiles = utils.remove_short_profiles(ds_profiles, n_samples=min_samples)
+    ds_profiles = utils.check_profile_time_diff(ds_profiles, threshold=gap_threshold)
 
     # create output directory
     try:

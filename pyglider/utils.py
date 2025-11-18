@@ -383,6 +383,84 @@ def get_profiles_new(ds, min_dp=10.0, filt_time=100, profile_min_time=300, _log=
     return ds
 
 
+def remove_short_profiles(ds: xr.Dataset, n_samples=150):
+    """
+    Remove profiles with fewer than n_samples. Returns a filtered xr.Dataset
+
+    Parameters
+    ----------
+    ds (xr.Dataset)
+        Dataset to filter
+    n_samples (int)
+        Minimum number of samples per profile, by default 150
+    """
+    # get profile ids
+    pids = ds["profile_id"].values
+
+    # Compute which profiles to keep
+    unique_ids, counts = np.unique(pids, return_counts=True)
+    keep_ids = set(unique_ids[counts >= n_samples])
+
+    # Build a boolean mask and convert to indices
+    mask = np.isin(pids, list(keep_ids))
+    keep_idx = np.nonzero(mask)[0]
+
+    # subset by the index mask
+    ds_filt = ds.isel(time=keep_idx)
+
+    return ds_filt
+
+
+def check_profile_time_diff(
+    ds: xr.Dataset, threshold: float = 30.0, epochs: int = 50
+) -> xr.Dataset:
+    """
+    Removes points where time gaps (before or after) exceed the threshold (seconds). Returns a filtered xr.Dataset
+
+    Parameters
+    ----------
+    ds (xr.Dataset)
+        Dataset to filter
+    threshold (float)
+        Maximum time gap (seconds), by default 30.0
+    epochs (int)
+        Number of epochs to check, by default 50. Recommended to use 25-50.
+    """
+    # ensure time is sorted
+    ds_working = ds.copy()
+    ds_working = ds_working.sortby("time")
+
+    threshold_td = np.timedelta64(threshold, "s")
+
+    for i in range(epochs):
+        time_vals = ds_working["time"].values
+        pid_vals = ds_working["profile_id"].values
+
+        # compute previous and next time differences
+        prev_diff = np.diff(time_vals, prepend=time_vals[0])
+        next_diff = np.diff(time_vals, append=time_vals[-1])
+
+        prev_diff = prev_diff.astype("timedelta64[ns]")
+        next_diff = next_diff.astype("timedelta64[ns]")
+
+        # zero out diffs when crossing between different profile_ids
+        profile_change = np.concatenate([[True], pid_vals[1:] != pid_vals[:-1]])
+        prev_diff[profile_change] = np.timedelta64(0, "ns")
+        next_diff[np.roll(profile_change, -1)] = np.timedelta64(0, "ns")
+
+        # attach to dataset (optional, for inspection)
+        ds_working["prev_sample_time_diff"] = (("time",), prev_diff)
+        ds_working["next_sample_time_diff"] = (("time",), next_diff)
+
+        # mark bad samples
+        bad = (prev_diff > threshold_td) | (next_diff > threshold_td)
+
+        # drop bad samples
+        ds_working = ds_working.isel(time=~bad)
+
+    return ds_working
+
+
 def get_derived_eos_raw(ds):
     """
     Calculate salinity, potential density, density, and potential temperature
