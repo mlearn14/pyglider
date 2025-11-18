@@ -1543,7 +1543,7 @@ def binary_to_profiles(
 
     # perform additional checks on the data
     ds_profiles = utils.remove_short_profiles(ds_profiles, n_samples=min_samples)
-    ds_profiles = utils.check_profile_time_diff(ds_profiles, threshold=gap_threshold)
+    ds_profiles = utils.check_profile_time_diff(ds_profiles, threshold=gap_threshold, _log=_log)
 
     # create output directory
     try:
