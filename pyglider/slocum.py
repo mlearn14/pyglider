@@ -1538,6 +1538,9 @@ def binary_to_timeseries_new(
         ds_profiles, gap_threshold=gap_threshold, _log=_log
     )
 
+    # convert profile_id to datetime
+    ds_profiles["profile_id"] = (ds_profiles.profile_id * 1e9).astype("datetime64[ns]")
+
     # create output directory
     try:
         os.makedirs(outdir, exist_ok=True)
