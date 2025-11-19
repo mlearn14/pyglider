@@ -1529,9 +1529,6 @@ def binary_to_timeseries_new(
     valid_idx = np.where(ds.profile_id > 0)[0]
     ds_profiles = ds.isel(time=valid_idx)
 
-    # get glider name
-    glider_name = ds.attrs["deployment_name"].split("-")[0]
-
     # now convert times to datetime64
     ds_profiles["time"] = (ds_profiles.time * 1e9).astype("datetime64[ns]")
 
