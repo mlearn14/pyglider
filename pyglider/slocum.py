@@ -1532,13 +1532,6 @@ def binary_to_timeseries_new(
     # get glider name
     glider_name = ds.attrs["deployment_name"].split("-")[0]
 
-    # Group by profile_id and compute the mean time for each profile to get the profile names
-    mean_times = ds_profiles.time.groupby(ds_profiles["profile_id"]).mean()
-    mean_times = pd.to_datetime(mean_times.values, unit="s", utc=True)
-    pnames = [
-        f"{glider_name}-{t}{fnamesuffix}.nc" for t in mean_times.strftime("%Y%m%dT%H%M")
-    ]
-
     # now convert times to datetime64
     ds_profiles["time"] = (ds_profiles.time * 1e9).astype("datetime64[ns]")
 
