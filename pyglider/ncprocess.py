@@ -48,12 +48,12 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
     deployment = utils._get_deployment(deploymentyaml)
 
     meta = deployment["metadata"]
-    platform = deployment["platform"]
     with xr.open_dataset(inname) as ds:
         _log.info("Extracting profiles: opening %s", inname)
         # might break due to profile_id being a datetime
-        profiles = np.unique(ds.profile_id)
-        profiles = [p for p in profiles if (~np.isnan(p) and not (p % 1) and (p > 0))]
+        profiles = np.unique(ds.profile_id.values)
+        profiles = [p for p in profiles if not np.isnat(p)]
+        profiles = sorted(profiles)
         for p in profiles:
             ind = np.where(ds.profile_id == p)[0]
             dss = ds.isel(time=ind)
@@ -88,25 +88,25 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
                     dss["u"] = np.nan
                     dss["v"] = np.nan
 
-                dss["profile_id"] = np.int32(p)
+                dss["profile_id"] = p
                 dss["profile_id"].attrs = profile_meta["profile_id"]
                 if "_FillValue" not in dss["profile_id"].attrs:
                     dss["profile_id"].attrs["_FillValue"] = -1
-                dss["profile_id"].attrs["valid_min"] = np.int32(
-                    dss["profile_id"].attrs["valid_min"]
-                )
-                dss["profile_id"].attrs["valid_max"] = np.int32(
-                    dss["profile_id"].attrs["valid_max"]
-                )
+                # dss["profile_id"].attrs["valid_min"] = np.int32(
+                #     dss["profile_id"].attrs["valid_min"]
+                # )
+                # dss["profile_id"].attrs["valid_max"] = np.int32(
+                #     dss["profile_id"].attrs["valid_max"]
+                # )
 
-                dss["profile_time"] = dss.time.mean()
-                dss["profile_time"].attrs = profile_meta["profile_time"]
+                # dss["profile_time"] = dss.time.mean()
+                # dss["profile_time"].attrs = profile_meta["profile_time"]
                 # remove units so they can be encoded later:
-                try:
-                    del dss.profile_time.attrs["units"]
-                    del dss.profile_time.attrs["calendar"]
-                except KeyError:
-                    pass
+                # try:
+                #     del dss.profile_time.attrs["units"]
+                #     del dss.profile_time.attrs["calendar"]
+                # except KeyError:
+                #     pass
                 dss["profile_lon"] = dss.longitude.mean()
                 dss["profile_lon"].attrs = profile_meta["profile_lon"]
                 dss["profile_lat"] = dss.latitude.mean()
@@ -114,33 +114,25 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
 
                 dss["lat"] = dss["latitude"]
                 dss["lon"] = dss["longitude"]
+
+                platform_meta = deployment["platform"]
                 dss["platform"] = np.int32(1)
-                comment = meta["glider_model"] + " operated by " + meta["institution"]
-                dss["platform"].attrs["comment"] = comment
-                dss["platform"].attrs["id"] = (
-                    meta["glider_name"] + meta["glider_serial"]
-                )
-                dss["platform"].attrs["instrument"] = "instrument_ctd"
-                dss["platform"].attrs["long_name"] = (
-                    meta["glider_model"] + dss["platform"].attrs["id"]
-                )
-                dss["platform"].attrs["type"] = "platform"
-                dss["platform"].attrs["wmo_id"] = meta["wmo_id"]
-                dss["platform"].attrs["depth_rating"] = platform["depth_rating"]
+                for attr in platform_meta:
+                    dss["platform"].attrs[attr] = platform_meta[attr]
                 if "_FillValue" not in dss["platform"].attrs:
                     dss["platform"].attrs["_FillValue"] = -1
 
-                dss["lat_uv"] = np.nan
-                dss["lat_uv"].attrs = profile_meta["lat_uv"]
-                dss["lon_uv"] = np.nan
-                dss["lon_uv"].attrs = profile_meta["lon_uv"]
-                dss["time_uv"] = np.nan
-                dss["time_uv"].attrs = profile_meta["time_uv"]
+                # dss["lat_uv"] = np.nan
+                # dss["lat_uv"].attrs = profile_meta["lat_uv"]
+                # dss["lon_uv"] = np.nan
+                # dss["lon_uv"].attrs = profile_meta["lon_uv"]
+                # dss["time_uv"] = np.nan
+                # dss["time_uv"].attrs = profile_meta["time_uv"]
 
-                dss["instrument_ctd"] = np.int32(1.0)
-                dss["instrument_ctd"].attrs = profile_meta["instrument_ctd"]
-                if "_FillValue" not in dss["instrument_ctd"].attrs:
-                    dss["instrument_ctd"].attrs["_FillValue"] = -1
+                # dss["instrument_ctd"] = np.int32(1.0)
+                # dss["instrument_ctd"].attrs = profile_meta["instrument_ctd"]
+                # if "_FillValue" not in dss["instrument_ctd"].attrs:
+                #     dss["instrument_ctd"].attrs["_FillValue"] = -1
 
                 dss.attrs["date_modified"] = str(np.datetime64("now")) + "Z"
 
@@ -169,8 +161,8 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
                 timeunits = "seconds since 1970-01-01T00:00:00Z"
                 timecalendar = "gregorian"
                 try:
-                    del dss.profile_time.attrs["_FillValue"]
-                    del dss.profile_time.attrs["units"]
+                    del dss.profile_id.attrs["_FillValue"]
+                    del dss.profile_id.attrs["units"]
                 except KeyError:
                     pass
                 dss.to_netcdf(
@@ -181,8 +173,9 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
                             "calendar": timecalendar,
                             "dtype": "float64",
                         },
-                        "profile_time": {
+                        "profile_id": {
                             "units": timeunits,
+                            "calendar": timecalendar,
                             "_FillValue": -99999.0,
                             "dtype": "float64",
                         },
