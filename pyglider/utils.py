@@ -673,12 +673,7 @@ def get_file_id(ds):
     else:
         dt = ds.time.values[0].astype("datetime64[s]")
     _log.debug(f"dt, {dt}")
-    id = (
-        ds.attrs["glider_name"]
-        + ds.attrs["glider_serial"]
-        + "-"
-        + dt.item().strftime("%Y%m%dT%H%M")
-    )
+    id = f"{ds.attrs["glider_name"]}-{dt.item().strftime("%Y%m%dT%H%M")}"
     return id
 
 
