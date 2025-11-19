@@ -1,6 +1,8 @@
 """
 Routines that are used for common processing of netcdf files after they have
 been converted to standard timeseries.
+Modified by Matthew Learn 11/19/2025
+Last Modified 11/19/2025
 """
 
 import logging
@@ -43,6 +45,7 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False):
     deployment = utils._get_deployment(deploymentyaml)
 
     meta = deployment["metadata"]
+    platform = deployment["platform"]
     with xr.open_dataset(inname) as ds:
         _log.info("Extracting profiles: opening %s", inname)
         profiles = np.unique(ds.profile_index)
@@ -119,6 +122,7 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False):
                 )
                 dss["platform"].attrs["type"] = "platform"
                 dss["platform"].attrs["wmo_id"] = meta["wmo_id"]
+                dss["platform"].attrs["depth_rating"] = platform["depth_rating"]
                 if "_FillValue" not in dss["platform"].attrs:
                     dss["platform"].attrs["_FillValue"] = -1
 
