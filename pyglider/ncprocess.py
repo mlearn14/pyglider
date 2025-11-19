@@ -18,7 +18,7 @@ import pyglider.utils as utils
 _log = logging.getLogger(__name__)
 
 
-def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False):
+def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _log=_log):
     """
     Extract and save each profile from a timeseries netCDF.
 
@@ -36,6 +36,9 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False):
 
     force : bool, default False
         Force an overwite even if profile netcdf already exists
+
+    _log : logging.Logger
+        logger
     """
     try:
         os.mkdir(outdir)
