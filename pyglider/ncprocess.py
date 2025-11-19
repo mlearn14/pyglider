@@ -48,10 +48,11 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False):
     platform = deployment["platform"]
     with xr.open_dataset(inname) as ds:
         _log.info("Extracting profiles: opening %s", inname)
-        profiles = np.unique(ds.profile_index)
+        # might break due to profile_id being a datetime
+        profiles = np.unique(ds.profile_id)
         profiles = [p for p in profiles if (~np.isnan(p) and not (p % 1) and (p > 0))]
         for p in profiles:
-            ind = np.where(ds.profile_index == p)[0]
+            ind = np.where(ds.profile_id == p)[0]
             dss = ds.isel(time=ind)
             outname = outdir + "/" + utils.get_file_id(dss) + ".nc"
             _log.info("Checking %s", outname)
@@ -247,7 +248,7 @@ def make_gridfiles(
     _log.debug(str(ds.time[0]))
     _log.debug(str(ds.time[-1]))
 
-    profiles = np.unique(ds.profile_index)
+    profiles = np.unique(ds.profile_id)
     profiles = [p for p in profiles if (~np.isnan(p) and not (p % 1) and (p > 0))]
     profile_bins = np.hstack((np.array(profiles) - 0.5, [profiles[-1] + 0.5]))
     _log.debug(profile_bins)
@@ -294,9 +295,9 @@ def make_gridfiles(
     ds["time_1970"] = ds.temperature.copy()
     ds["time_1970"].values = ds.time.values.astype(np.float64)
     for td in ("time_1970", "longitude", "latitude"):
-        good = np.where(~np.isnan(ds[td]) & (ds["profile_index"] % 1 == 0))[0]
+        good = np.where(~np.isnan(ds[td]) & (ds["profile_id"] % 1 == 0))[0]
         dat, xedges, binnumber = stats.binned_statistic(
-            ds["profile_index"].values[good],
+            ds["profile_id"].values[good],
             ds[td].values[good],
             statistic="mean",
             bins=[profile_bins],
@@ -309,11 +310,11 @@ def make_gridfiles(
 
     # Bin by profile index, for the profile start (min) and end (max) times
     profile_lookup = {"profile_time_start": "min", "profile_time_end": "max"}
-    good = np.where(~np.isnan(ds["time"]) & (ds["profile_index"] % 1 == 0))[0]
+    good = np.where(~np.isnan(ds["time"]) & (ds["profile_id"] % 1 == 0))[0]
     for td, bin_stat in profile_lookup.items():
         _log.debug(f"td, bin_stat {td}, {bin_stat}")
         dat, xedges, binnumber = stats.binned_statistic(
-            ds["profile_index"].values[good],
+            ds["profile_id"].values[good],
             ds["time_1970"].values[good],
             statistic=bin_stat,
             bins=[profile_bins],
@@ -329,7 +330,7 @@ def make_gridfiles(
         if k in ["time", "profile", "longitude", "latitude", "depth"] or "time" in k:
             continue
         _log.info("Gridding %s", k)
-        good = np.where(~np.isnan(ds[k]) & (ds["profile_index"] % 1 == 0))[0]
+        good = np.where(~np.isnan(ds[k]) & (ds["profile_id"] % 1 == 0))[0]
         if len(good) <= 0:
             continue
         if "average_method" in ds[k].attrs:
@@ -346,7 +347,7 @@ def make_gridfiles(
         else:
             average_method = "mean"
         dat, xedges, yedges, binnumber = stats.binned_statistic_2d(
-            ds["profile_index"].values[good],
+            ds["profile_id"].values[good],
             ds["depth"].values[good],
             values=ds[k].values[good],
             statistic=average_method,
