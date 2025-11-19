@@ -1,7 +1,7 @@
 """
 Routines to convert raw slocum dinkum files to netcdf timeseries.
-Modified by Lori Garzio 5/19/2025
-Last Modified 8/7/2025
+Modified by Matthew Learn 11/11/2025
+Last Modified 11/19/2025
 """
 
 from datetime import datetime, timezone
@@ -1315,7 +1315,7 @@ def binary_to_timeseries(
     return outname
 
 
-def binary_to_profiles(
+def binary_to_timeseries_new(
     indir: str,
     cachedir: str,
     outdir: str,
@@ -1411,6 +1411,7 @@ def binary_to_profiles(
 
     ncvar = deployment["netcdf_variables"]
     device_data = deployment["instruments"]
+    platform = deployment["platform"]
     thenames = list(ncvar.keys())
     thenames.remove("time")
 
@@ -1553,32 +1554,21 @@ def binary_to_profiles(
     except Exception as e:
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
-    # get each profile and save to netcdf with proper name
-    written = []
-    pids = np.unique(ds_profiles.profile_id.values)
-    for pid, pn in zip(pids, pnames):
-        profile = ds_profiles.where(ds_profiles.profile_id == pid, drop=True)
-
-        outpath = os.path.join(outdir, pn)
-        _log.info(f"Writing profile {pn} to {outpath}")
-
-        profile.to_netcdf(
-            outpath,
-            mode="w",
-            encoding={
-                "time": {
-                    "units": "seconds since 1970-01-01T00:00:00Z",
-                    "_FillValue": np.nan,
-                    "dtype": "float64",
-                }
-            },
-        )
-
-        written.append(outpath)
-
-    _log.info(f"Wrote {len(written)} profiles to {outdir}")
-
-    return written
+    # save ds_profiles as a temporary timeseries dataset
+    outpath = os.path.join(outdir, "tmp.nc")
+    _log.info(f"Writing temporary timeseries to {outpath}")
+    ds_profiles.to_netcdf(
+        outpath,
+        mode="w",
+        encoding={
+            "time": {
+                "units": "seconds since 1970-01-01T00:00:00Z",
+                "_FillValue": np.nan,
+                "dtype": "float64",
+            }
+        },
+    )
+    return outpath
 
 
 # alias:
