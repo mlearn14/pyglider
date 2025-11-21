@@ -1397,8 +1397,11 @@ def binary_to_timeseries_new(
 
     Returns
     -------
-    written : list[string]
-        names of the new netcdf files.
+    outname : string
+        path to the saved netcdf file.
+
+    ds : xarray.Dataset
+        the processed xarray Dataset.
     """
 
     if not have_dbdreader:
@@ -1526,19 +1529,17 @@ def binary_to_timeseries_new(
 
     # keep only valid profiles
     valid_idx = np.where(ds.profile_id > 0)[0]
-    ds_profiles = ds.isel(time=valid_idx)
+    ds = ds.isel(time=valid_idx)
 
     # now convert times to datetime64
-    ds_profiles["time"] = (ds_profiles.time * 1e9).astype("datetime64[ns]")
+    ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
 
     # perform additional checks on the data
-    ds_profiles = utils.remove_short_profiles(ds_profiles, n_samples=min_samples)
-    ds_profiles = utils.check_profile_time_diff(
-        ds_profiles, gap_threshold=gap_threshold, _log=_log
-    )
+    ds = utils.remove_short_profiles(ds, n_samples=min_samples)
+    ds = utils.check_profile_time_diff(ds, gap_threshold=gap_threshold, _log=_log)
 
     # convert profile_id to datetime
-    ds_profiles["profile_id"] = (ds_profiles.profile_id * 1e9).astype("datetime64[ns]")
+    ds["profile_id"] = (ds.profile_id * 1e9).astype("datetime64[ns]")
 
     # create output directory
     try:
@@ -1546,10 +1547,10 @@ def binary_to_timeseries_new(
     except Exception as e:
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
-    # save ds_profiles as a temporary timeseries dataset
+    # save ds as a temporary timeseries dataset
     outname = os.path.join(outdir, f"{ds.attrs["deployment_name"]}.nc")
     _log.info(f"Writing timeseries data to {outname}")
-    ds_profiles.to_netcdf(
+    ds.to_netcdf(
         outname,
         mode="w",
         encoding={
@@ -1560,7 +1561,7 @@ def binary_to_timeseries_new(
             }
         },
     )
-    return outname
+    return outname, ds
 
 
 # alias:
