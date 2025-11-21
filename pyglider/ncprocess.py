@@ -122,6 +122,11 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
                 if "_FillValue" not in dss["platform"].attrs:
                     dss["platform"].attrs["_FillValue"] = -1
 
+                # add source_file
+                source_file = utils.get_file_id(dss) + ".nc"
+                dss["source_file"] = source_file.encode()
+                dss["source_file"].attrs["source_file"] = source_file
+
                 # dss["lat_uv"] = np.nan
                 # dss["lat_uv"].attrs = profile_meta["lat_uv"]
                 # dss["lon_uv"] = np.nan
