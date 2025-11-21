@@ -1411,7 +1411,6 @@ def binary_to_timeseries_new(
 
     ncvar = deployment["netcdf_variables"]
     device_data = deployment["instruments"]
-    platform = deployment["platform"]
     thenames = list(ncvar.keys())
     thenames.remove("time")
 
@@ -1548,10 +1547,10 @@ def binary_to_timeseries_new(
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
     # save ds_profiles as a temporary timeseries dataset
-    outpath = os.path.join(outdir, "tmp.nc")
-    _log.info(f"Writing temporary timeseries to {outpath}")
+    outname = os.path.join(outdir, f"{ds.attrs["deployment_name"]}.nc")
+    _log.info(f"Writing timeseries data to {outname}")
     ds_profiles.to_netcdf(
-        outpath,
+        outname,
         mode="w",
         encoding={
             "time": {
@@ -1561,7 +1560,7 @@ def binary_to_timeseries_new(
             }
         },
     )
-    return outpath
+    return outname
 
 
 # alias:
