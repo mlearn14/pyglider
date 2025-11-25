@@ -1540,7 +1540,7 @@ def binary_to_timeseries_new(
 
     # convert profile_id to datetime
     ds["profile_id"] = (ds.profile_id * 1e9).astype("datetime64[ns]")
-    ds = utils.fill_ts_metadata(ds, deployment)
+    ds = utils.fill_ts_metadata(ds, deployment, _log=_log)
 
     # create output directory
     try:

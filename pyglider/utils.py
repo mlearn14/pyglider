@@ -742,7 +742,7 @@ def fill_metadata(ds, metadata, sensor_data):
     return ds
 
 
-def fill_ts_metadata(ds, deployment):
+def fill_ts_metadata(ds, deployment, _log=_log):
     """
     Fill in the metadata for a timeseries file.
 
