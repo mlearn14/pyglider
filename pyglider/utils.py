@@ -742,6 +742,113 @@ def fill_metadata(ds, metadata, sensor_data):
     return ds
 
 
+def fill_ts_metadata(ds, deployment):
+    """
+    Fill in the metadata for a timeseries file.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        timeseries dataset
+    deploymentyaml : dict
+        deployment config dictionary
+
+    Returns
+    ----------
+    ds : xarray.Dataset
+    """
+    profile_meta = deployment["profile_variables"]
+    platform_meta = deployment["platform"]
+
+    profile_list = []
+    profiles = np.unique(ds.profile_id.values)
+    profiles = [p for p in profiles if not np.isnat(p)]
+    profiles = sorted(profiles)
+    for p in profiles:
+        ind = np.where(ds.profile_id == p)[0]
+        dss = ds.isel(time=ind)
+
+        # this is the id for the whole file, not just this profile..
+        dss["trajectory"] = get_file_id(ds).encode()
+        dss["trajectory"].attrs["cf_role"] = "trajectory_id"
+        traj_comment = "A trajectory is a single deployment of a glider and may span multiple data files."
+        dss["trajectory"].attrs["comment"] = traj_comment
+        dss["trajectory"].attrs["long_name"] = "Trajectory/Deployment Name"
+
+        dss["lat"] = dss["latitude"]
+        dss["lon"] = dss["longitude"]
+
+        # profile-averaged variables....
+        if "water_velocity_eastward" in dss.keys():
+            dss["u"] = dss.water_velocity_eastward.mean()
+            dss["u"].attrs = profile_meta["u"]
+
+            dss["v"] = dss.water_velocity_northward.mean()
+            dss["v"].attrs = profile_meta["v"]
+        elif "u" in profile_meta:
+            dss["u"] = profile_meta["u"].get("_FillValue", np.nan)
+            dss["u"].attrs = profile_meta["u"]
+
+            dss["v"] = profile_meta["v"].get("_FillValue", np.nan)
+            dss["v"].attrs = profile_meta["v"]
+        else:
+            dss["u"] = np.nan
+            dss["v"] = np.nan
+        dss["profile_id"] = p
+        dss["profile_id"].attrs = profile_meta["profile_id"]
+        if "_FillValue" not in dss["profile_id"].attrs:
+            dss["profile_id"].attrs["_FillValue"] = -1
+        dss["profile_lon"] = dss.longitude.mean()
+        dss["profile_lon"].attrs = profile_meta["profile_lon"]
+        dss["profile_lat"] = dss.latitude.mean()
+        dss["profile_lat"].attrs = profile_meta["profile_lat"]
+
+        # add platform metadata
+        dss["platform"] = np.int32(1)
+        for attr in platform_meta:
+            dss["platform"].attrs[attr] = platform_meta[attr]
+        if "_FillValue" not in dss["platform"].attrs:
+            dss["platform"].attrs["_FillValue"] = -1
+
+        # add source_file
+        source_file = get_file_id(dss) + ".nc"
+        dss["source_file"] = source_file.encode()
+        dss["source_file"].attrs["source_file"] = source_file
+
+        dss.attrs["date_modified"] = str(np.datetime64("now")) + "Z"
+
+        # ancillary variables: link and create with values of 2.  If
+        # we dont' want them all 2, then create these variables in the
+        # time series
+        to_fill = [
+            "temperature",
+            "pressure",
+            "conductivity",
+            "salinity",
+            "density",
+            "lon",
+            "lat",
+            "depth",
+        ]
+        for name in to_fill:
+            qcname = name + "_qc"
+            dss[name].attrs["ancillary_variables"] = qcname
+            if qcname not in dss.keys():
+                dss[qcname] = ("time", 2 * np.ones(len(dss[name]), np.int8))
+                dss[qcname].attrs = fill_required_qcattrs({}, name)
+                # 2 is "not eval"
+
+        try:
+            del dss.profile_id.attrs["_FillValue"]
+            del dss.profile_id.attrs["units"]
+        except KeyError:
+            pass
+
+        profile_list.append(dss)
+
+    return xr.concat(profile_list, dim="time")
+
+
 def _zero_screen(val):
     val[val == 0] = np.nan
     return val
