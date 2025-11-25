@@ -228,11 +228,11 @@ def get_profiles_new(ds, min_dp=10.0, filt_time=100, profile_min_time=300, _log=
             "1970-01-01T00:00:00"
         ).astype("datetime64[ns]")
         dt = float(np.median(np.diff(tm[good[:200000]]).astype(np.float64)) * 1e-9)
-        _log.info(f"dt, {dt}")
+        _log.debug(f"dt, {dt}")
         filt_length = int(filt_time / dt)
 
         min_nsamples = int(profile_min_time / dt)
-        _log.info("Filt Len  %d, dt %f, min_n %d", filt_length, dt, min_nsamples)
+        _log.debug("Filt Len  %d, dt %f, min_n %d", filt_length, dt, min_nsamples)
         if filt_length > 1:
             # performs a moving average smoothing
             p = np.convolve(
