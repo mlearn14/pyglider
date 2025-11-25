@@ -349,8 +349,8 @@ def get_profiles_new(ds, min_dp=10.0, filt_time=100, profile_min_time=300, _log=
 
         attrs = collections.OrderedDict(
             [
-                ("long_name", "profile index"),
-                ("units", "1"),
+                ("long_name", "profile id"),
+                ("units", "seconds since 1970-01-01T00:00:00Z"),
                 # ('comment', 'N = inside profile N, N + 0.5 = between profiles N and N + 1'),
                 (
                     "comment",
@@ -795,7 +795,7 @@ def fill_ts_metadata(ds, deployment, _log=_log):
             dss["u"] = np.nan
             dss["v"] = np.nan
         dss["profile_id"] = p
-        dss["profile_id"].attrs = profile_meta["profile_id"]
+        dss["profile_id"].attrs = ds["profile_id"].attrs
         if "_FillValue" not in dss["profile_id"].attrs:
             dss["profile_id"].attrs["_FillValue"] = -1
         dss["profile_lon"] = dss.longitude.mean()
