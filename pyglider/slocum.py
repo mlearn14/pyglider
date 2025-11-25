@@ -1540,6 +1540,7 @@ def binary_to_timeseries_new(
 
     # convert profile_id to datetime
     ds["profile_id"] = (ds.profile_id * 1e9).astype("datetime64[ns]")
+    ds = utils.fill_ts_metadata(ds, deployment)
 
     # create output directory
     try:
@@ -1547,7 +1548,7 @@ def binary_to_timeseries_new(
     except Exception as e:
         _log.warning(f"Could not create output directory {outdir}: {e}")
 
-    # save ds as a temporary timeseries dataset
+    # save ds as a timeseries dataset
     outname = os.path.join(outdir, f"{ds.attrs["deployment_name"]}.nc")
     _log.info(f"Writing timeseries data to {outname}")
     ds.to_netcdf(
