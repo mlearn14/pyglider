@@ -1539,9 +1539,9 @@ def binary_to_timeseries_new(
     ds = utils.check_profile_time_diff(ds, gap_threshold=gap_threshold, _log=_log)
 
     # convert profile_id to datetime
-    profile_id_attrs = ds.profile_id.attrs.copy()
-    ds["profile_id"] = (ds.profile_id * 1e9).astype("datetime64[ns]")
-    ds["profile_id"].attrs = profile_id_attrs
+    # profile_id_attrs = ds.profile_id.attrs.copy()
+    # ds["profile_id"] = (ds.profile_id * 1e9).astype("datetime64[ns]")
+    # ds["profile_id"].attrs = profile_id_attrs
     ds = utils.fill_ts_metadata(ds, deployment, _log=_log)
 
     # create output directory

@@ -762,7 +762,7 @@ def fill_ts_metadata(ds, deployment, _log=_log):
 
     profile_list = []
     profiles = np.unique(ds.profile_id.values)
-    profiles = [p for p in profiles if not np.isnat(p)]
+    profiles = [p for p in profiles if p != 0]
     profiles = sorted(profiles)
     for p in profiles:
         ind = np.where(ds.profile_id == p)[0]
