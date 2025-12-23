@@ -383,7 +383,9 @@ def get_profiles_new(ds, min_dp=10.0, filt_time=100, profile_min_time=300, _log=
     return ds
 
 
-def remove_short_profiles(ds: xr.Dataset, n_samples=150):
+def remove_short_profiles(
+    ds: xr.Dataset, n_samples=150
+):  # TODO: move to qc and have it only flag bad profiles
     """
     Remove profiles with fewer than n_samples. Returns a filtered xr.Dataset
 
@@ -411,7 +413,7 @@ def remove_short_profiles(ds: xr.Dataset, n_samples=150):
     return ds_filt
 
 
-def check_profile_time_diff(
+def check_profile_time_diff(  # TODO: move to qc and only flag bad profiles (GAP TEST)
     ds: xr.Dataset, gap_threshold: int = 30, epochs: int = 50, _log=_log
 ) -> xr.Dataset:
     """

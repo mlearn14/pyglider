@@ -1535,8 +1535,8 @@ def binary_to_timeseries_new(
     ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
 
     # perform additional checks on the data
-    ds = utils.remove_short_profiles(ds, n_samples=min_samples)
-    ds = utils.check_profile_time_diff(ds, gap_threshold=gap_threshold, _log=_log)
+    # ds = utils.remove_short_profiles(ds, n_samples=min_samples)
+    # ds = utils.check_profile_time_diff(ds, gap_threshold=gap_threshold, _log=_log)
 
     # convert profile_id to datetime
     # profile_id_attrs = ds.profile_id.attrs.copy()
