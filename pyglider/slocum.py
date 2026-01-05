@@ -1328,8 +1328,6 @@ def binary_to_timeseries_new(
     profile_filt_time: int = 100,
     profile_min_time: int = 300,
     maxgap: float = 300,
-    min_samples: int = 75,
-    gap_threshold: int = 30,
     replace_attrs: dict = None,
     _log: logging.Logger = _log,
 ) -> list[str]:
