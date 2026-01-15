@@ -1330,7 +1330,7 @@ def binary_to_timeseries_new(
     maxgap: float = 300,
     replace_attrs: dict = None,
     _log: logging.Logger = _log,
-) -> list[str]:
+) -> tuple[str, xr.Dataset]:
     """
     Convert directly from binary files to netcdf profile files.  Requires
     dbdreader to be installed.
