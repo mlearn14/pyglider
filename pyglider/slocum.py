@@ -1439,12 +1439,20 @@ def binary_to_timeseries_new(
     # get the dbd file
     _log.info(f"{indir}/{search}")
     dbd = dbdreader.MultiDBD(pattern=f"{indir}/{search}", cacheDir=cachedir)
+
+    # get the segment ids for each profile
+    ((t_base_array, _), sources) = dbd.get(time_base, include_source=True)
+    segment_ids = np.array(
+        [os.path.basename(src.filename).split(".")[0] for src in sources]
+    )
+
     # get the data, with `time_base` as the time source that
     # all other variables are synced to:
     data = list(dbd.get_sync(*sensors))
     # get the time:
     time = data.pop(0)
     ds["time"] = (("time"), time, attr)
+    ds["segment_id"] = (("time"), segment_ids.astype("U8"))
     ds["latitude"] = (("time"), np.zeros(len(time)))
     ds["longitude"] = (("time"), np.zeros(len(time)))
     # get the time_base data:
