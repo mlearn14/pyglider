@@ -1,7 +1,7 @@
 """
 Routines to convert raw slocum dinkum files to netcdf timeseries.
 Modified by Matthew Learn 11/11/2025
-Last Modified 11/19/2025
+Last Modified 02/17/2026
 """
 
 from datetime import datetime, timezone
