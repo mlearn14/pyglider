@@ -819,26 +819,26 @@ def fill_ts_metadata(ds, deployment, _log=_log):
 
         dss.attrs["date_modified"] = str(np.datetime64("now")) + "Z"
 
-        # ancillary variables: link and create with values of 2.  If
-        # we dont' want them all 2, then create these variables in the
-        # time series
-        to_fill = [
-            "temperature",
-            "pressure",
-            "conductivity",
-            "salinity",
-            "density",
-            "lon",
-            "lat",
-            "depth",
-        ]
-        for name in to_fill:
-            qcname = name + "_qc"
-            dss[name].attrs["ancillary_variables"] = qcname
-            if qcname not in dss.keys():
-                dss[qcname] = ("time", 2 * np.ones(len(dss[name]), np.int8))
-                dss[qcname].attrs = fill_required_qcattrs({}, name)
-                # 2 is "not eval"
+        # # ancillary variables: link and create with values of 2.  If
+        # # we dont' want them all 2, then create these variables in the
+        # # time series
+        # to_fill = [
+        #     "temperature",
+        #     "pressure",
+        #     "conductivity",
+        #     "salinity",
+        #     "density",
+        #     "lon",
+        #     "lat",
+        #     "depth",
+        # ]
+        # for name in to_fill:
+        #     qcname = name + "_qc"
+        #     dss[name].attrs["ancillary_variables"] = qcname
+        #     if qcname not in dss.keys():
+        #         dss[qcname] = ("time", 2 * np.ones(len(dss[name]), np.int8))
+        #         dss[qcname].attrs = fill_required_qcattrs({}, name)
+        #         # 2 is "not eval"
 
         try:
             del dss.profile_id.attrs["_FillValue"]
