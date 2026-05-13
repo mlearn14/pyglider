@@ -10,6 +10,7 @@ import os
 
 import netCDF4
 import numpy as np
+import pandas as pd
 import scipy.stats as stats
 import xarray as xr
 
@@ -50,7 +51,14 @@ def extract_timeseries_profiles(inname, outdir, deploymentyaml, force=False, _lo
     meta = deployment["metadata"]
     with xr.open_dataset(inname) as ds:
         _log.info("Extracting profiles: opening %s", inname)
-        # might break due to profile_id being a datetime
+
+        # convert profile_id to datetime
+        if np.issubdtype(ds.profile_id.dtype, np.floating):
+            ds["profile_id"] = xr.DataArray(
+                pd.to_datetime(ds.profile_id.values, unit="s", utc=True).values,
+                dims=ds.profile_id.dims,
+            )
+
         profiles = np.unique(ds.profile_id.values)
         profiles = [p for p in profiles if not np.isnat(p)]
         profiles = sorted(profiles)
