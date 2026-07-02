@@ -1441,7 +1441,7 @@ def binary_to_timeseries_new(
     dbd = dbdreader.MultiDBD(pattern=f"{indir}/{search}", cacheDir=cachedir)
 
     # get the segment ids for each profile
-    ((t_base_array, _), sources) = dbd.get(time_base, include_source=True)
+    (t_base_array, _), sources = dbd.get(time_base, include_source=True)
     segment_ids = np.array(
         [os.path.basename(src.filename).split(".")[0] for src in sources]
     )
