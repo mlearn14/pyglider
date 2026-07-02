@@ -5,7 +5,7 @@ Last Modified 02/17/2026
 """
 
 from datetime import datetime, timezone
-
+from pathlib import Path
 import bitstring
 
 try:
@@ -687,18 +687,21 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + glidersuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
-        outnebd = outdir + "/" + id + "rawdbd.nc"
+        tmpout = Path(os.path.join(outdir, f"{id}rawdbd_tmp.nc"))
+        outnebd = Path("".join(tmpout.split("_tmp")))
         ds = ds.sortby("time")
         ds["_ind"] = np.arange(len(ds.time))
-        ds.to_netcdf(outnebd, "w")
+        ds.to_netcdf(tmpout, "w")
+        tmpout.replace(outnebd)  # atomic overwrite
 
     fin = glob.glob(indir + "/*." + scisuffix + ".nc")
-
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
-        outnebd = outdir + "/" + id + "rawebd.nc"
+        tmpout = Path(os.path.join(outdir, f"{id}rawebd_tmp.nc"))
+        outnebd = Path("".join(tmpout.split("_tmp")))
         ds = ds.sortby("time")
         ds["_ind"] = np.arange(len(ds.time))
-        ds.to_netcdf(outnebd, "w")
+        ds.to_netcdf(tmpout, "w")
+        tmpout.replace(outnebd)  # atomic overwrite
 
 
 def raw_to_timeseries(
