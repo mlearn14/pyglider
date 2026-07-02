@@ -686,8 +686,9 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + glidersuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
-        tmpout = Path(os.path.join(outdir, f"{id}-rawdbd_tmp.nc"))
-        outnebd = Path("".join(tmpout.split("_tmp")))
+        tmpname = os.path.join(outdir, f"{id}-rawdbd_tmp.nc")
+        tmpout = Path(tmpname)
+        outnebd = Path("".join(tmpname.split("_tmp")))
         ds = ds.sortby("time")
         ds["_ind"] = np.arange(len(ds.time))
         ds.to_netcdf(tmpout, "w")
@@ -695,8 +696,9 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + scisuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
-        tmpout = Path(os.path.join(outdir, f"{id}-rawebd_tmp.nc"))
-        outnebd = Path("".join(tmpout.split("_tmp")))
+        tmpname = os.path.join(outdir, f"{id}-rawebd_tmp.nc")
+        tmpout = Path(tmpname)
+        outnebd = Path("".join(tmpname.split("_tmp")))
         ds = ds.sortby("time")
         ds["_ind"] = np.arange(len(ds.time))
         ds.to_netcdf(tmpout, "w")
