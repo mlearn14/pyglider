@@ -662,8 +662,7 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
     deployment = utils._get_deployment(deploymentyaml)
 
     metadata = deployment["metadata"]
-    id = metadata["glider_name"] + metadata["glider_serial"]
-
+    id = metadata["deployment"]
     # different missions get a different number and they may not merge
     # smoothly, hence the different files made here.
 
@@ -687,7 +686,7 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + glidersuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
-        tmpout = Path(os.path.join(outdir, f"{id}rawdbd_tmp.nc"))
+        tmpout = Path(os.path.join(outdir, f"{id}-rawdbd_tmp.nc"))
         outnebd = Path("".join(tmpout.split("_tmp")))
         ds = ds.sortby("time")
         ds["_ind"] = np.arange(len(ds.time))
@@ -696,7 +695,7 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + scisuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
-        tmpout = Path(os.path.join(outdir, f"{id}rawebd_tmp.nc"))
+        tmpout = Path(os.path.join(outdir, f"{id}-rawebd_tmp.nc"))
         outnebd = Path("".join(tmpout.split("_tmp")))
         ds = ds.sortby("time")
         ds["_ind"] = np.arange(len(ds.time))
