@@ -676,10 +676,7 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
         -------
         xr.Dataset
         """
-        try:
-            p = ds.m_pressure.values
-        except:
-            p = ds.sci_water_pressure
+        p = ds.m_pressure.values
 
         # Only determine direction below the surface threshold
         mask = p >= surface_threshold
@@ -797,7 +794,6 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
         time = pd.to_datetime(ds.sci_m_present_time.values, unit="s")
         ds = ds.assign_coords(time=("_ind", time))
         ds["depth"] = ds.sci_water_pressure * 10.197442889221
-        ds = get_profile_direction_raw(ds)
         tmpname = os.path.join(outdir, f"{id}-rawebd_tmp.nc")
         tmpout = Path(tmpname)
         outnebd = Path("".join(tmpname.split("_tmp")))
