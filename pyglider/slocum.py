@@ -657,6 +657,98 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     """
 
+    def get_profile_direction_raw(ds, threshold=0.5, surface_threshold=0.5):
+        """
+        Determine glider profile direction from pressure using a hysteresis
+        state machine. Surface data shallower than `surface_threshold` are
+        ignored when determining direction and are filled afterward.
+
+        Parameters
+        ----------
+        ds : xr.Dataset
+            Dataset containing m_pressure.
+        threshold : float, optional
+            Pressure change (dbar) required to reverse direction.
+        surface_threshold : float, optional
+            Pressure shallower than this (dbar) is ignored.
+
+        Returns
+        -------
+        xr.Dataset
+        """
+
+        p = ds.m_pressure.values
+
+        # Only determine direction below the surface threshold
+        mask = p >= surface_threshold
+
+        direction = np.zeros(len(p), dtype=np.int8)
+
+        if np.any(mask):
+
+            p_deep = p[mask]
+            direction_deep = np.zeros(len(p_deep), dtype=np.int8)
+
+            state = 0
+            p_min = p_deep[0]
+            p_max = p_deep[0]
+
+            for i in range(1, len(p_deep)):
+
+                if state == 0:
+                    if p_deep[i] > p_min + threshold:
+                        state = 1
+                        p_max = p_deep[i]
+                    elif p_deep[i] < p_max - threshold:
+                        state = -1
+                        p_min = p_deep[i]
+
+                elif state == 1:  # descending
+
+                    if p_deep[i] > p_max:
+                        p_max = p_deep[i]
+
+                    if p_deep[i] < p_max - threshold:
+                        state = -1
+                        p_min = p_deep[i]
+
+                elif state == -1:  # ascending
+
+                    if p_deep[i] < p_min:
+                        p_min = p_deep[i]
+
+                    if p_deep[i] > p_min + threshold:
+                        state = 1
+                        p_max = p_deep[i]
+
+                direction_deep[i] = state
+
+            # Insert deep directions back into full array
+            direction[mask] = direction_deep
+
+            # Fill shallow regions with nearest valid direction
+            direction = (
+                pd.Series(direction)
+                .replace(0, np.nan)
+                .ffill()
+                .bfill()
+                .fillna(0)
+                .astype(np.int8)
+                .values
+            )
+
+        ds["profile_direction"] = xr.DataArray(
+            direction,
+            dims=("_ind",),
+            attrs={
+                "long_name": "Profile direction",
+                "flag_values": np.array([-1, 0, 1], dtype=np.int8),
+                "flag_meanings": "ascending unknown descending",
+            },
+        )
+
+        return ds
+
     scisuffix = scisuffix.lower()
     glidersuffix = glidersuffix.lower()
     deployment = utils._get_deployment(deploymentyaml)
@@ -686,6 +778,10 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + glidersuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
+        time = pd.to_datetime(ds.m_present_time.values, unit="s")
+        ds = ds.assign_coords(time=("_ind", time))
+        ds["depth"] = ds.m_pressure * 10.197442889221
+        ds = get_profile_direction_raw(ds)
         tmpname = os.path.join(outdir, f"{id}-rawdbd_tmp.nc")
         tmpout = Path(tmpname)
         outnebd = Path("".join(tmpname.split("_tmp")))
@@ -696,6 +792,10 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
 
     fin = glob.glob(indir + "/*." + scisuffix + ".nc")
     with xr.open_mfdataset(fin, decode_times=False, lock=False) as ds:
+        time = pd.to_datetime(ds.sci_m_present_time.values, unit="s")
+        ds = ds.assign_coords(time=("_ind", time))
+        ds["depth"] = ds.sci_water_pressure * 10.197442889221
+        ds = get_profile_direction_raw(ds)
         tmpname = os.path.join(outdir, f"{id}-rawebd_tmp.nc")
         tmpout = Path(tmpname)
         outnebd = Path("".join(tmpname.split("_tmp")))
