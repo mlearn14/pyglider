@@ -676,8 +676,10 @@ def merge_rawnc(indir, outdir, deploymentyaml, scisuffix="EBD", glidersuffix="DB
         -------
         xr.Dataset
         """
-
-        p = ds.m_pressure.values
+        try:
+            p = ds.m_pressure.values
+        except:
+            p = ds.sci_water_pressure
 
         # Only determine direction below the surface threshold
         mask = p >= surface_threshold
